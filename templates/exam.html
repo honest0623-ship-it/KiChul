@@ -1,0 +1,329 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title }}</title>
+  <style>
+    @page {
+      size: {{ page_width_mm }}mm {{ page_height_mm }}mm;
+      margin: {{ margin_mm }}mm;
+    }
+
+    body {
+      font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      color: #111;
+      font-size: {{ font_size_pt }}pt;
+      line-height: 1.52;
+      margin: 0;
+    }
+
+    .layout-root {
+      margin: 0;
+      padding: 0;
+    }
+
+    .problem-page {
+      min-height: {{ page_height_mm - (margin_mm * 2) }}mm;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: {{ column_gap_mm }}mm;
+      box-sizing: border-box;
+      break-after: page;
+      page-break-after: always;
+    }
+
+    .problem-page.last {
+      break-after: auto;
+      page-break-after: auto;
+    }
+
+    .problem-column {
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .problem-box {
+      min-width: 0;
+      min-height: 0;
+      box-sizing: border-box;
+      overflow: visible;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      -webkit-column-break-inside: avoid;
+    }
+
+    .problem-box + .problem-box {
+      margin-top: 0;
+    }
+
+    .problem-card {
+      margin: 0;
+      width: 100%;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      -webkit-column-break-inside: avoid;
+    }
+
+    .problem-number {
+      font-weight: 700;
+      margin: 0 0 0.8mm 0;
+    }
+
+    .problem-source {
+      margin: 0 0 1.2mm 0;
+      font-size: calc({{ font_size_pt }}pt - 1.6pt);
+      color: #5a6472;
+      letter-spacing: 0.01em;
+    }
+
+    .question p,
+    .choices p {
+      margin: 0 0 0.8mm 0;
+    }
+
+    .question p:last-child,
+    .choices p:last-child {
+      margin-bottom: 0;
+    }
+
+    .question p:has(mjx-container[display="true"]),
+    .choices p:has(mjx-container[display="true"]) {
+      margin-bottom: 0.5mm;
+    }
+
+    .MathJax_Display,
+    mjx-container[display="true"],
+    mjx-container[jax="CHTML"][display="true"],
+    mjx-container[jax="SVG"][display="true"] {
+      margin-top: 0.6mm !important;
+      margin-bottom: 0.6mm !important;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      -webkit-column-break-inside: avoid;
+    }
+
+    mjx-container,
+    mjx-container * {
+      font-weight: 400 !important;
+    }
+
+    mjx-container[jax="SVG"] {
+      color: #222;
+    }
+
+    mjx-container[jax="SVG"] svg {
+      opacity: 0.88;
+    }
+
+    mjx-container[display="false"],
+    mjx-container[jax="CHTML"][display="false"],
+    mjx-container[jax="SVG"][display="false"] {
+      vertical-align: -0.08em;
+      line-height: 1;
+    }
+
+    .question img,
+    .choices img {
+      display: block;
+      max-width: 30%;
+      height: auto;
+      margin: 0.8mm auto;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      -webkit-column-break-inside: avoid;
+    }
+
+    .choices {
+      margin-top: 1mm;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .problem-pool {
+      position: absolute;
+      visibility: hidden;
+      pointer-events: none;
+      left: -10000px;
+      top: 0;
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+
+  {{ mathjax_bootstrap }}
+  <script defer src="{{ mathjax_bundle_uri }}"></script>
+</head>
+<body>
+  <main id="layout-root" class="layout-root"></main>
+
+  <div id="problem-pool" class="problem-pool" aria-hidden="true">
+    {% for problem in problems %}
+      <section class="problem-card" data-number="{{ problem.number }}">
+        <p class="problem-number">{{ problem.number }}.</p>
+        {% if show_source_info and problem.source_info %}
+          <p class="problem-source">{{ problem.source_info }}</p>
+        {% endif %}
+        <div class="question">{{ problem.question_html }}</div>
+        {% if problem.choices_html %}
+          <div class="choices">{{ problem.choices_html }}</div>
+        {% endif %}
+      </section>
+    {% endfor %}
+  </div>
+
+  <script>
+    (function () {
+      const pageHeightMm = {{ page_height_mm }};
+      const marginMm = {{ margin_mm }};
+      const columnGapMm = {{ column_gap_mm }};
+
+      function mmToPx(mm) {
+        const probe = document.createElement("div");
+        probe.style.position = "absolute";
+        probe.style.visibility = "hidden";
+        probe.style.width = "100mm";
+        document.body.appendChild(probe);
+        const pxPerMm = probe.getBoundingClientRect().width / 100;
+        probe.remove();
+        return pxPerMm * mm;
+      }
+
+      function measureCardHeight(card, widthPx) {
+        const prevWidth = card.style.width;
+        const prevMaxWidth = card.style.maxWidth;
+        card.style.width = `${widthPx}px`;
+        card.style.maxWidth = `${widthPx}px`;
+        const h = card.getBoundingClientRect().height;
+        card.style.width = prevWidth;
+        card.style.maxWidth = prevMaxWidth;
+        return h;
+      }
+
+      function buildPages(items, boxHeightPx) {
+        const pages = [];
+        let idx = 0;
+
+        while (idx < items.length) {
+          const pageColumns = [];
+
+          for (let col = 0; col < 2 && idx < items.length; col += 1) {
+            const first = items[idx];
+
+            // If a question exceeds one box (1/4 page), it must occupy the column alone.
+            if (first.heightCol > boxHeightPx) {
+              pageColumns.push([first]);
+              idx += 1;
+              continue;
+            }
+
+            const second = items[idx + 1];
+            if (second && second.heightCol <= boxHeightPx) {
+              // Standard 4-slot mapping per page block:
+              // col1 => [1(top), 2(bottom)], col2 => [3(top), 4(bottom)]
+              pageColumns.push([first, second]);
+              idx += 2;
+            } else {
+              // If next item is long, this short item stays alone in its column.
+              pageColumns.push([first]);
+              idx += 1;
+            }
+          }
+
+          pages.push(pageColumns);
+        }
+
+        return pages;
+      }
+
+      function renderPages(root, pages, pageBodyHeightPx, boxHeightPx) {
+        root.innerHTML = "";
+
+        pages.forEach((columns, pageIndex) => {
+          const pageEl = document.createElement("section");
+          pageEl.className = "problem-page";
+          if (pageIndex === pages.length - 1) pageEl.classList.add("last");
+          pageEl.style.minHeight = `${pageBodyHeightPx}px`;
+
+          const paddedColumns = [columns[0] || [], columns[1] || []];
+
+          paddedColumns.forEach((colItems) => {
+            const colEl = document.createElement("div");
+            colEl.className = "problem-column";
+
+            if (colItems.length >= 2) {
+              const topBox = document.createElement("article");
+              topBox.className = "problem-box";
+              topBox.style.height = `${boxHeightPx}px`;
+              topBox.appendChild(colItems[0].card.cloneNode(true));
+              colEl.appendChild(topBox);
+
+              const bottomBox = document.createElement("article");
+              bottomBox.className = "problem-box";
+              bottomBox.style.height = `${boxHeightPx}px`;
+              bottomBox.appendChild(colItems[1].card.cloneNode(true));
+              colEl.appendChild(bottomBox);
+            } else if (colItems.length === 1) {
+              const singleBox = document.createElement("article");
+              singleBox.className = "problem-box";
+              singleBox.style.height = `${pageBodyHeightPx}px`;
+              singleBox.appendChild(colItems[0].card.cloneNode(true));
+              colEl.appendChild(singleBox);
+            } else {
+              const emptyBox = document.createElement("article");
+              emptyBox.className = "problem-box";
+              emptyBox.style.height = `${pageBodyHeightPx}px`;
+              colEl.appendChild(emptyBox);
+            }
+
+            pageEl.appendChild(colEl);
+          });
+
+          root.appendChild(pageEl);
+        });
+      }
+
+      function layoutProblemPages() {
+        const root = document.getElementById("layout-root");
+        const pool = document.getElementById("problem-pool");
+        if (!root || !pool) return;
+
+        const cards = Array.from(pool.querySelectorAll(".problem-card"));
+        if (!cards.length) {
+          root.innerHTML = "";
+          return;
+        }
+
+        const pxPerMm = mmToPx(1);
+        const pageBodyHeightPx = (pageHeightMm - marginMm * 2) * pxPerMm;
+        const pageWidthPx = root.getBoundingClientRect().width;
+        if (pageWidthPx <= 0) return;
+
+        const colGapPx = columnGapMm * pxPerMm;
+        const columnWidthPx = (pageWidthPx - colGapPx) / 2;
+        const boxHeightPx = pageBodyHeightPx / 2;
+
+        pool.style.width = `${pageWidthPx}px`;
+
+        const measured = cards.map((card) => ({
+          card,
+          heightCol: measureCardHeight(card, columnWidthPx),
+        }));
+
+        const pages = buildPages(measured, boxHeightPx);
+        renderPages(root, pages, pageBodyHeightPx, boxHeightPx);
+      }
+
+      window.__layoutProblemPages = layoutProblemPages;
+
+      window.addEventListener("load", () => {
+        setTimeout(() => {
+          layoutProblemPages();
+        }, 60);
+      });
+    })();
+  </script>
+</body>
+</html>
