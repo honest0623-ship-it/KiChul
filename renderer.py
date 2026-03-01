@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from html import escape
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Dict, List, Sequence
@@ -22,6 +23,11 @@ IMG_TAG_RE = re.compile(
     re.IGNORECASE,
 )
 RAW_ORIGINAL_MARKER = "assets/original/"
+MATH_PLACEHOLDER_RE = re.compile(r"@@MATH_BLOCK_(\d+)@@")
+MATH_SEGMENT_RE = re.compile(
+    r"(\$\$.*?\$\$|\\\[.*?\\\]|\\\(.*?\\\)|\$(?:\\.|[^$\n\\])+\$)",
+    re.DOTALL,
+)
 
 
 @dataclass(frozen=True)
@@ -284,8 +290,26 @@ def _rewrite_img_sources(
 
 
 def _markdown_to_html(md_text: str) -> str:
+    # Preserve TeX segments before markdown conversion.
+    # Python-Markdown consumes backslashes in normal text, which breaks
+    # matrix/cases syntax (e.g., "\\\\", "\\begin{...}") used by MathJax.
+    saved_math: List[str] = []
+
+    def stash_math(match: re.Match[str]) -> str:
+        saved_math.append(match.group(1))
+        return f"@@MATH_BLOCK_{len(saved_math) - 1}@@"
+
+    protected = MATH_SEGMENT_RE.sub(stash_math, md_text)
     converter = markdown.Markdown(extensions=["extra", "sane_lists", "nl2br"])
-    return converter.convert(md_text)
+    html_text = converter.convert(protected)
+
+    def restore_math(match: re.Match[str]) -> str:
+        index = int(match.group(1))
+        if index < 0 or index >= len(saved_math):
+            return match.group(0)
+        return escape(saved_math[index], quote=False)
+
+    return MATH_PLACEHOLDER_RE.sub(restore_math, html_text)
 
 
 def _extract_source_question_no(front_matter: Dict[str, object]) -> str:

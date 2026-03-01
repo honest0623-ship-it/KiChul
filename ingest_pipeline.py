@@ -166,6 +166,50 @@ def _natural_sort_key(name: str) -> List[Any]:
     return [int(token) if token.isdigit() else token.lower() for token in re.split(r"(\d+)", name)]
 
 
+# File-name unit hint mapping.
+# Expected names: "012_나머지정리.png", "서답3번_이차방정식과 이차함수.png", etc.
+FILENAME_UNIT_HINT_MAP: Dict[str, Tuple[str, str, str]] = {
+    "다항식의 연산": ("공통수학1(2022개정)", "1. 다항식", "1-1. 다항식의 연산"),
+    "나머지정리": ("공통수학1(2022개정)", "1. 다항식", "1-2. 나머지정리"),
+    "인수분해": ("공통수학1(2022개정)", "1. 다항식", "1-3. 인수분해"),
+    "복소수와 이차방정식": ("공통수학1(2022개정)", "2. 방정식과 부등식", "2-1. 복소수와 이차방정식"),
+    "이차방정식과 이차함수": ("공통수학1(2022개정)", "2. 방정식과 부등식", "2-2. 이차방정식과 이차함수"),
+    "여러 가지 방정식": ("공통수학1(2022개정)", "2. 방정식과 부등식", "2-3. 여러 가지 방정식"),
+    "여러 가지 부등식": ("공통수학1(2022개정)", "2. 방정식과 부등식", "2-4. 여러 가지 부등식"),
+    "합의 법칙과 곱의 법칙": ("공통수학1(2022개정)", "3. 경우의 수", "3-1. 합의 법칙과 곱의 법칙"),
+    "순열과 조합": ("공통수학1(2022개정)", "3. 경우의 수", "3-2. 순열과 조합"),
+    "행렬과 그 연산": ("공통수학1(2022개정)", "4. 행렬", "4-1. 행렬과 그 연산"),
+}
+
+
+def _extract_unit_hint_from_filename(filename: str) -> str:
+    stem = Path(filename).stem.strip()
+    if "_" not in stem:
+        return ""
+    # Use first underscore as separator: "<번호>_<소단원>".
+    _, hint = stem.split("_", 1)
+    hint = re.sub(r"\s+", " ", hint).strip()
+    return hint
+
+
+def _unit_triplet_from_filename_hint(filename: str) -> Optional[Tuple[str, str, str]]:
+    hint = _extract_unit_hint_from_filename(filename)
+    if not hint:
+        return None
+
+    # Direct match first.
+    matched = FILENAME_UNIT_HINT_MAP.get(hint)
+    if matched:
+        return matched
+
+    # Compact fallback.
+    compact = re.sub(r"\s+", "", hint)
+    for key, value in FILENAME_UNIT_HINT_MAP.items():
+        if re.sub(r"\s+", "", key) == compact:
+            return value
+    return None
+
+
 def list_original_images(original_dir: Path) -> List[Path]:
     if not original_dir.exists():
         return []
@@ -978,12 +1022,26 @@ def ingest_images(
                 grade=config.grade,
                 problem_no=problem_no,
             )
-            unit_l1, unit_l2, unit_l3 = normalize_unit_triplet(
-                classification.unit_l1,
-                classification.unit_l2,
-                classification.unit_l3,
-                grade=config.grade,
-            )
+            hinted_unit = _unit_triplet_from_filename_hint(item.filename)
+            if hinted_unit is not None:
+                unit_l1, unit_l2, unit_l3 = normalize_unit_triplet(
+                    hinted_unit[0],
+                    hinted_unit[1],
+                    hinted_unit[2],
+                    grade=config.grade,
+                )
+            else:
+                unit_l1, unit_l2, unit_l3 = normalize_unit_triplet(
+                    classification.unit_l1,
+                    classification.unit_l2,
+                    classification.unit_l3,
+                    grade=config.grade,
+                )
+                if _extract_unit_hint_from_filename(item.filename):
+                    warnings.append(
+                        f"{problem_id}: filename unit hint not matched "
+                        f"({item.filename}). classifier result used."
+                    )
             content = _build_problem_markdown(
                 problem_id=problem_id,
                 config=config,
