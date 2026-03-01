@@ -11,10 +11,10 @@ source_question_kind: subjective
 source_question_label: 서답2
 difficulty: '3'
 level: 3
-unit: 공통수학1 > 다항식 > 나머지정리/인수정리
-unit_l1: 공통수학1
-unit_l2: 다항식
-unit_l3: 나머지정리/인수정리
+unit: 공통수학1(2022개정)>1. 다항식>1-2. 나머지정리
+unit_l1: 공통수학1(2022개정)
+unit_l2: 1. 다항식
+unit_l3: 1-2. 나머지정리
 source: user_upload_2026-02-27
 tags:
 - 서답형-단답형
@@ -23,7 +23,6 @@ assets:
 - assets/original/
 - assets/original/서답2번.png
 ---
-
 ## Q
 다항식 $f(x), g(x)$에 대하여 $f(x)$의 최고차항의 계수가 $3$이고, $f(x)$를 $g(x)$로 나누었을 때의 몫과 나머지가 모두 $g(x)-3x$라 하자. $f(x)g(x)$를 $3x-1$로 나누었을 때의 몫을 $Q(x)$, 나머지를 $R$이라 할 때, $Q(0)+R$의 값을 구하시오.
 

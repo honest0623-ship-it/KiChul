@@ -11,10 +11,10 @@ source_question_kind: objective
 source_question_label: '17'
 difficulty: '3'
 level: 3
-unit: 공통수학1 > 방정식과 부등식 > 복소수
-unit_l1: 공통수학1
-unit_l2: 방정식과 부등식
-unit_l3: 복소수
+unit: 공통수학1(2022개정)>1. 다항식>1-2. 나머지정리
+unit_l1: 공통수학1(2022개정)
+unit_l2: 1. 다항식
+unit_l3: 1-2. 나머지정리
 source: user_upload_2026-02-27
 tags:
 - 객관식
@@ -23,7 +23,6 @@ assets:
 - assets/original/
 - assets/original/017.png
 ---
-
 ## Q
 최고차항의 계수가 $1$인 두 이차식 $P(x),\ Q(x)$에 대하여 모든 계수가 정수이고, $P(3)=Q(3)=0$, $P(2)Q(4)=3$을 만족한다. $P(x)Q(x)$는 $(x-k)^2$을 인수로 가지며 $P(x),Q(x)$는 각각 $(x-k)^2$을 인수로 갖지 않을 때, 가능한 $P(1)$의 최댓값은?
 

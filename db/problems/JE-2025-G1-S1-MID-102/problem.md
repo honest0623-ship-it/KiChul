@@ -1,4 +1,4 @@
-﻿---
+---
 id: JE-2025-G1-S1-MID-102
 school: JE
 year: 2025
@@ -11,10 +11,10 @@ source_question_kind: subjective
 source_question_label: 서답2
 difficulty: '4'
 level: 4
-unit: 공통수학1 > 방정식과 부등식 > 복소수
-unit_l1: 공통수학1
-unit_l2: 방정식과 부등식
-unit_l3: 복소수
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-3. 여러 가지 방정식
+unit_l1: 공통수학1(2022개정)
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-3. 여러 가지 방정식
 source: user_upload_2026-02-27
 tags:
 - 서답형-단답형
@@ -23,7 +23,6 @@ assets:
 - assets/original/
 - assets/original/서답2번.png
 ---
-
 ## Q
 삼차방정식 $x^3-ax^2+bx+3a=0$의 한 허근이 $2+\sqrt{5}i$이고, 실근을 $k$라 할 때, $a+b+k$의 값을 구하시오.
 (단, $a,\ b$는 실수이다.)

@@ -11,10 +11,10 @@ source_question_kind: subjective
 source_question_label: 서답3
 difficulty: '4'
 level: 4
-unit: 공통수학1 > 방정식과 부등식 > 이차방정식과 이차함수
-unit_l1: 공통수학1
-unit_l2: 방정식과 부등식
-unit_l3: 이차방정식과 이차함수
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-2. 이차방정식과 이차함수
+unit_l1: 공통수학1(2022개정)
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-2. 이차방정식과 이차함수
 source: user_upload_2026-02-27
 tags:
 - 서답형-단답형
@@ -23,7 +23,6 @@ assets:
 - assets/original/
 - assets/original/서답3번.png
 ---
-
 ## Q
 실수 $a$에 대하여 최고차항의 계수가 정수인 이차함수 $f(x)$가 다음 조건을 만족시킬 때, $f(a+3)$의 값을 구하시오.
 

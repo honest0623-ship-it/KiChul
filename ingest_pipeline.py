@@ -3,12 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import tempfile
 from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple
 import re
 import shutil
 from gemini_solver import solve_problem_with_gemini
 from groq_solver import DEFAULT_GROQ_MODEL, DEPRECATED_GROQ_MODELS, solve_problem_with_groq
 from unit_level_classifier import classify_unit_and_level
+from unit_taxonomy import normalize_unit_triplet
 
 try:
     from PIL import Image
@@ -24,6 +26,16 @@ try:
     from rapidocr_onnxruntime import RapidOCR
 except ImportError:  # pragma: no cover - optional dependency
     RapidOCR = None  # type: ignore[assignment]
+
+try:
+    import cv2
+except ImportError:  # pragma: no cover - optional dependency
+    cv2 = None  # type: ignore[assignment]
+
+try:
+    import numpy as np
+except ImportError:  # pragma: no cover - optional dependency
+    np = None  # type: ignore[assignment]
 
 
 SUPPORTED_IMAGE_EXTENSIONS = {
@@ -45,6 +57,13 @@ ANY_NUMERIC_TOKEN_RE = re.compile(r"(?<!\d)([0-9]{1,3})(?!\d)")
 ANSWER_HINT_RE = re.compile(r"(정답|answer|ans)", re.IGNORECASE)
 SOLUTION_HINT_RE = re.compile(r"(해설|solution|sol|풀이)", re.IGNORECASE)
 ANSWER_TEXT_RE = re.compile(r"(?:정답|answer|ans)?\s*[:：]?\s*([①②③④⑤1-5])", re.IGNORECASE)
+SUBJECTIVE_LABEL_LINE_RE = re.compile(
+    r"^\s*\[?\s*서답형(?:\s*\([^)]*\))?\s*\d+\s*번\s*\]?\s*$",
+    re.IGNORECASE,
+)
+QUESTION_SECTION_SKIP_LINE_RE = re.compile(r"^\s*(?:정답|해설|풀이)\s*[:：]?", re.IGNORECASE)
+CHOICE_TOKEN_RE = re.compile(r"(①|②|③|④|⑤|⑴|⑵|⑶|⑷|⑸|\([1-5]\)|（[1-5]）|[1-5][\.\)])")
+CHOICE_MARKERS = ["①", "②", "③", "④", "⑤"]
 RAPID_OCR_ENGINE: Any = None
 
 
@@ -143,6 +162,10 @@ def _extract_problem_no_from_name(stem: str, subjective_offset: int) -> Optional
     return None
 
 
+def _natural_sort_key(name: str) -> List[Any]:
+    return [int(token) if token.isdigit() else token.lower() for token in re.split(r"(\d+)", name)]
+
+
 def list_original_images(original_dir: Path) -> List[Path]:
     if not original_dir.exists():
         return []
@@ -152,7 +175,7 @@ def list_original_images(original_dir: Path) -> List[Path]:
             for item in original_dir.iterdir()
             if item.is_file() and item.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
         ],
-        key=lambda p: p.name.lower(),
+        key=lambda p: _natural_sort_key(p.name),
     )
 
 
@@ -208,6 +231,82 @@ def sanitize_question_text(text: str) -> str:
     return cleaned.strip()
 
 
+def _clean_question_body(text: str) -> str:
+    cleaned = sanitize_question_text(text)
+    if not cleaned:
+        return ""
+
+    filtered_lines: List[str] = []
+    for line in cleaned.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            filtered_lines.append("")
+            continue
+        if SUBJECTIVE_LABEL_LINE_RE.match(stripped):
+            continue
+        if QUESTION_SECTION_SKIP_LINE_RE.match(stripped):
+            continue
+        filtered_lines.append(line)
+
+    normalized = "\n".join(filtered_lines)
+    normalized = MULTI_NEWLINE_RE.sub("\n\n", normalized)
+    return normalized.strip()
+
+
+def _choice_index_from_token(token: str) -> Optional[int]:
+    mapper = {
+        "①": 1,
+        "②": 2,
+        "③": 3,
+        "④": 4,
+        "⑤": 5,
+        "⑴": 1,
+        "⑵": 2,
+        "⑶": 3,
+        "⑷": 4,
+        "⑸": 5,
+    }
+    normalized = token.strip()
+    if normalized in mapper:
+        return mapper[normalized]
+    digit_match = re.search(r"[1-5]", normalized)
+    if digit_match:
+        return int(digit_match.group(0))
+    return None
+
+
+def _extract_objective_question_and_choices(raw_text: str) -> Tuple[str, str]:
+    cleaned = _clean_question_body(raw_text)
+    if not cleaned:
+        return "", ""
+
+    matches = list(CHOICE_TOKEN_RE.finditer(cleaned))
+    if len(matches) < 4:
+        return cleaned, ""
+
+    choices: Dict[int, str] = {}
+    for idx, match in enumerate(matches):
+        choice_idx = _choice_index_from_token(match.group(1))
+        if choice_idx is None:
+            continue
+        start = match.end()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(cleaned)
+        raw_piece = cleaned[start:end]
+        normalized_piece = MULTI_SPACE_RE.sub(" ", re.sub(r"\s*\n\s*", " ", raw_piece)).strip(" \t:：-")
+        if normalized_piece and choice_idx not in choices:
+            choices[choice_idx] = normalized_piece
+
+    if len(choices) < 4:
+        return cleaned, ""
+
+    question_body = cleaned[: matches[0].start()].strip()
+    if not question_body:
+        question_body = cleaned
+
+    choice_lines = [f"{CHOICE_MARKERS[idx - 1]} {choices.get(idx, '')}".rstrip() for idx in range(1, 6)]
+    return question_body, "\n".join(choice_lines)
+
+
 def _rapidocr_engine() -> Any:
     global RAPID_OCR_ENGINE  # pylint: disable=global-statement
     if RapidOCR is None:
@@ -256,23 +355,113 @@ def detect_ocr_ready() -> Tuple[bool, str]:
     return True, "OCR ready (Tesseract)"
 
 
+def _merge_warning(first: Optional[str], second: Optional[str]) -> Optional[str]:
+    items = [item.strip() for item in [first, second] if item and item.strip()]
+    if not items:
+        return None
+    if len(items) == 1:
+        return items[0]
+    return " | ".join(items)
+
+
+def _prepare_ocr_image(image_path: Path) -> Tuple[Path, bool, Optional[str]]:
+    if cv2 is None or np is None:
+        return image_path, False, None
+
+    temp_path: Optional[Path] = None
+    try:
+        image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+        if image is None:
+            return image_path, False, "OCR pre-processing skipped (failed to read image)."
+
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        red_mask_1 = cv2.inRange(hsv, np.array([0, 45, 25]), np.array([15, 255, 255]))
+        red_mask_2 = cv2.inRange(hsv, np.array([160, 45, 25]), np.array([179, 255, 255]))
+        marker_mask = cv2.bitwise_or(red_mask_1, red_mask_2)
+        vivid_color_mask = cv2.inRange(hsv, np.array([70, 70, 20]), np.array([179, 255, 255]))
+        marker_mask = cv2.bitwise_or(marker_mask, vivid_color_mask)
+
+        kernel = np.ones((3, 3), np.uint8)
+        marker_mask = cv2.morphologyEx(marker_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+        marker_mask = cv2.dilate(marker_mask, kernel, iterations=1)
+
+        if cv2.countNonZero(marker_mask) > 0:
+            image = cv2.inpaint(image, marker_mask, 3, cv2.INPAINT_TELEA)
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (3, 3), 0)
+        binary = cv2.adaptiveThreshold(
+            gray,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            31,
+            11,
+        )
+        binary = cv2.medianBlur(binary, 3)
+
+        temp_file = tempfile.NamedTemporaryFile(prefix="ocr_clean_", suffix=".png", delete=False)
+        temp_file.close()
+        temp_path = Path(temp_file.name)
+        if not cv2.imwrite(str(temp_path), binary):
+            if temp_path.exists():
+                temp_path.unlink(missing_ok=True)
+            return image_path, False, "OCR pre-processing skipped (failed to write temp image)."
+        return temp_path, True, None
+    except Exception as exc:  # pylint: disable=broad-except
+        if temp_path and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+        return image_path, False, f"OCR pre-processing failed ({exc})."
+
+
 def _run_ocr(image_path: Path, lang: str) -> Tuple[str, Optional[str]]:
+    prepared_path, using_temp, prep_warning = _prepare_ocr_image(image_path)
+    cleanup_targets: List[Path] = []
+    if using_temp:
+        cleanup_targets.append(prepared_path)
+
+    def _cleanup() -> None:
+        for temp in cleanup_targets:
+            temp.unlink(missing_ok=True)
+
+    def _select_better_text(primary: str, fallback: str) -> str:
+        if len(primary.strip()) >= len(fallback.strip()):
+            return primary
+        return fallback
+
     engine = _rapidocr_engine()
     if engine is not None:
         try:
-            raw_result, _ = engine(str(image_path))
-            return _rapidocr_to_text(raw_result), None
+            raw_result, _ = engine(str(prepared_path))
+            extracted = _rapidocr_to_text(raw_result)
+
+            if using_temp and len(extracted.strip()) < 16:
+                fallback_raw, _ = engine(str(image_path))
+                fallback_text = _rapidocr_to_text(fallback_raw)
+                extracted = _select_better_text(extracted, fallback_text)
+
+            _cleanup()
+            return extracted, prep_warning
         except Exception as exc:  # pylint: disable=broad-except
-            return "", f"RapidOCR failed: {exc}"
+            _cleanup()
+            return "", _merge_warning(prep_warning, f"RapidOCR failed: {exc}")
 
     if pytesseract is None or Image is None:
-        return "", "OCR dependencies are not installed."
+        _cleanup()
+        return "", _merge_warning(prep_warning, "OCR dependencies are not installed.")
     try:
-        with Image.open(image_path) as img:
+        with Image.open(prepared_path) as img:
             extracted = pytesseract.image_to_string(img, lang=lang)
+        if using_temp and len(extracted.strip()) < 16:
+            with Image.open(image_path) as img:
+                fallback_text = pytesseract.image_to_string(img, lang=lang)
+            extracted = _select_better_text(extracted, fallback_text)
     except Exception as exc:  # pylint: disable=broad-except
-        return "", f"OCR failed: {exc}"
-    return extracted, None
+        _cleanup()
+        return "", _merge_warning(prep_warning, f"OCR failed: {exc}")
+
+    _cleanup()
+    return extracted, prep_warning
 
 
 def _normalize_choice_token(token: str) -> str:
@@ -417,9 +606,10 @@ def _build_problem_markdown(
     source_record_label = config.source_label or f"web_upload_{datetime.now().strftime('%Y-%m-%d')}"
     source_record_label = source_record_label.replace('"', "'")
     used_ocr = bool(config.use_ocr and extracted_text.strip())
+    cleaned_question = _clean_question_body(extracted_text)
     q_lines: List[str] = []
-    if used_ocr:
-        q_lines.append(sanitize_question_text(extracted_text))
+    if used_ocr and cleaned_question:
+        q_lines.append(cleaned_question)
     else:
         q_lines.append("(OCR 결과가 없어서 문제 텍스트를 자동 입력하지 못했습니다.)")
         q_lines.append("(아래 원본 이미지를 참고해 문제 텍스트를 입력하세요.)")
@@ -450,7 +640,7 @@ source_question_kind: {source_kind}
 source_question_label: "{source_label if source_label else ""}"
 difficulty: {level}
 level: {level}
-unit: "{' > '.join([item for item in [unit_l1.strip(), unit_l2.strip(), unit_l3.strip()] if item])}"
+unit: "{'>'.join([item for item in [unit_l1.strip(), unit_l2.strip(), unit_l3.strip()] if item])}"
 unit_l1: "{unit_l1}"
 unit_l2: "{unit_l2}"
 unit_l3: "{unit_l3}"
@@ -458,8 +648,6 @@ source: "{source_record_label}"
 tags:
 {tags_block}
 assets:
-  # Inline figure image path (use when Q/Choices references this file).
-  - assets/scan.png
   # Raw source image archive.
   - assets/original/
   - assets/original/{original_asset_filename}
@@ -704,6 +892,21 @@ def ingest_images(
             if ocr_warning:
                 warnings.append(f"{problem_id}: question OCR warning ({ocr_warning})")
 
+            if effective_qtype == "객관식":
+                question_body, parsed_choices = _extract_objective_question_and_choices(extracted_text)
+                if parsed_choices:
+                    extracted_text = question_body
+                    choices_markdown = parsed_choices
+                else:
+                    warnings.append(
+                        f"{problem_id}: 객관식 선택지 OCR 파싱 실패(수동 검수 필요)."
+                    )
+
+            if len(_clean_question_body(extracted_text)) < 18:
+                warnings.append(
+                    f"{problem_id}: 문제 본문 OCR 인식이 불충분합니다(수동 검수 필요)."
+                )
+
             answer_source = answer_index.get(problem_no)
             if answer_source is not None:
                 copied_answer = _resolve_unique_path(original_assets / answer_source.name)
@@ -775,6 +978,12 @@ def ingest_images(
                 grade=config.grade,
                 problem_no=problem_no,
             )
+            unit_l1, unit_l2, unit_l3 = normalize_unit_triplet(
+                classification.unit_l1,
+                classification.unit_l2,
+                classification.unit_l3,
+                grade=config.grade,
+            )
             content = _build_problem_markdown(
                 problem_id=problem_id,
                 config=config,
@@ -787,9 +996,9 @@ def ingest_images(
                 choices_markdown=choices_markdown,
                 answer_text=answer_text,
                 solution_text=solution_text,
-                unit_l1=classification.unit_l1,
-                unit_l2=classification.unit_l2,
-                unit_l3=classification.unit_l3,
+                unit_l1=unit_l1,
+                unit_l2=unit_l2,
+                unit_l3=unit_l3,
                 level=classification.level,
                 used_ai_generation=(ai_result is not None),
             )

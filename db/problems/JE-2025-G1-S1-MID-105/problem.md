@@ -11,10 +11,10 @@ source_question_kind: subjective
 source_question_label: 서답5
 difficulty: '5'
 level: 5
-unit: 공통수학1 > 방정식과 부등식 > 이차방정식
-unit_l1: 공통수학1
-unit_l2: 방정식과 부등식
-unit_l3: 이차방정식
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-1. 복소수와 이차방정식
+unit_l1: 공통수학1(2022개정)
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-1. 복소수와 이차방정식
 source: user_upload_2026-02-27
 tags:
 - 서답형-서술형
@@ -23,7 +23,6 @@ assets:
 - assets/original/
 - assets/original/서답5번.png
 ---
-
 ## Q
 $x$에 대한 이차방정식
 $$

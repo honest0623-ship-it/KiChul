@@ -10,7 +10,7 @@ source_question_no: 8
 source_question_kind: objective
 source_question_label: '8'
 difficulty: '4'
-unit: 공통수학1 > 방정식과 부등식 > 복소수
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-1. 복소수와 이차방정식
 source: web_upload_2026-02-28
 tags:
 - 자동입력
@@ -23,11 +23,10 @@ assets:
 - assets/original/
 - assets/original/008.png
 level: 4
-unit_l1: 공통수학1
-unit_l2: 방정식과 부등식
-unit_l3: 복소수
+unit_l1: 공통수학1(2022개정)
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-1. 복소수와 이차방정식
 ---
-
 ## Q
 함수 $f(n)=\left(\frac{1-i}{1+i}\right)^{2n}$, $g(m)=\left(\frac{1+i}{1-i}\right)^{m+1}$ 일 때, $f(1)+g(1)+f(2)+g(2)+\cdots+f(13)+g(13)$의 값은?
 
@@ -39,7 +38,7 @@ unit_l3: 복소수
 ⑤ $-2$
 
 ## Answer
-$-2$
+⑤
 
 ## Solution
 먼저 주어진 복소수 식을 간단히 합니다.

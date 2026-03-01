@@ -11,10 +11,10 @@ source_question_kind: objective
 source_question_label: '14'
 difficulty: '2'
 level: 2
-unit: 공통수학1 > 다항식 > 나머지정리/인수정리
-unit_l1: 공통수학1
-unit_l2: 다항식
-unit_l3: 나머지정리/인수정리
+unit: 공통수학1(2022개정)>1. 다항식>1-2. 나머지정리
+unit_l1: 공통수학1(2022개정)
+unit_l2: 1. 다항식
+unit_l3: 1-2. 나머지정리
 source: user_upload_2026-02-27
 tags:
 - 객관식
@@ -23,7 +23,6 @@ assets:
 - assets/original/
 - assets/original/014.png
 ---
-
 ## Q
 $x^3$의 계수가 1인 삼차식 $P(x)$에 대하여
 $$

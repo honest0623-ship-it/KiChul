@@ -26,6 +26,14 @@ from groq_solver import (
     ranked_groq_models,
 )
 from parser import parse_problem_file
+from unit_taxonomy import (
+    LEAF_PATHS,
+    default_selected_unit_nodes,
+    expand_unit_nodes_to_leaf_paths,
+    normalize_unit_path,
+    normalize_unit_triplet,
+    unit_tree_for_ui,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -37,7 +45,7 @@ PROBLEM_ID_RE = re.compile(
     r"^(?P<school>[^-]+)-(?P<year>\d{4})-G(?P<grade>\d+)-S(?P<semester>\d+)-(?P<exam>[^-]+)-(?P<number>\d{3})$"
 )
 SOURCE_NO_TAG_RE = re.compile(r"출제번호-(\d+)")
-DEFAULT_OBJECTIVE_SOURCE_NUMBERS = [str(num) for num in range(1, 19)]
+DEFAULT_OBJECTIVE_SOURCE_NUMBERS = [str(num) for num in range(1, 21)]
 DEFAULT_SUBJECTIVE_SOURCE_NUMBERS = [f"서답{num}" for num in range(1, 7)]
 DEFAULT_SOURCE_LABELS = [*DEFAULT_OBJECTIVE_SOURCE_NUMBERS, *DEFAULT_SUBJECTIVE_SOURCE_NUMBERS]
 
@@ -205,15 +213,21 @@ def _sort_source_labels(values: List[str]) -> List[str]:
 
 def _extract_unit_from_front_matter(front_matter: Dict[str, Any]) -> str:
     unit = str(front_matter.get("unit", "")).strip()
-    if unit:
-        return unit
 
     pieces = [
         str(front_matter.get("unit_l1", "")).strip(),
         str(front_matter.get("unit_l2", "")).strip(),
         str(front_matter.get("unit_l3", "")).strip(),
     ]
-    return " > ".join([piece for piece in pieces if piece])
+    grade_value = _parse_int(str(front_matter.get("grade", "")).strip(), 0) or None
+    unit_l1, unit_l2, unit_l3 = normalize_unit_triplet(
+        pieces[0],
+        pieces[1],
+        pieces[2],
+        unit_path=unit,
+        grade=grade_value,
+    )
+    return normalize_unit_path(f"{unit_l1}>{unit_l2}>{unit_l3}", grade=grade_value)
 
 
 def _extract_level_from_front_matter(front_matter: Dict[str, Any]) -> str:
@@ -282,7 +296,17 @@ def _distinct_values(rows: List[Dict[str, str]], key: str, numeric: bool = False
     return sorted(values)
 
 
-def _build_pdf_filter_options(problem_meta: List[Dict[str, str]]) -> Dict[str, List[str]]:
+def _sort_exam_values(values: List[str]) -> List[str]:
+    priority = {"MID": 0, "FINAL": 1}
+
+    def key(item: str) -> tuple[int, str]:
+        token = item.strip().upper()
+        return (priority.get(token, 2), token)
+
+    return sorted(values, key=key)
+
+
+def _build_pdf_filter_options(problem_meta: List[Dict[str, str]]) -> Dict[str, Any]:
     source_labels = set(_distinct_values(problem_meta, "source_label"))
     source_labels.update(DEFAULT_SOURCE_LABELS)
     return {
@@ -290,19 +314,24 @@ def _build_pdf_filter_options(problem_meta: List[Dict[str, str]]) -> Dict[str, L
         "years": _distinct_values(problem_meta, "year", numeric=True),
         "grades": _distinct_values(problem_meta, "grade", numeric=True),
         "semesters": _distinct_values(problem_meta, "semester", numeric=True),
-        "exams": _distinct_values(problem_meta, "exam"),
-        "units": _distinct_values(problem_meta, "unit"),
+        "exams": _sort_exam_values(_distinct_values(problem_meta, "exam")),
+        "units": list(LEAF_PATHS),
+        "unit_tree": unit_tree_for_ui(),
         "levels": _distinct_values(problem_meta, "level", numeric=True),
         "source_numbers": _sort_source_labels(list(source_labels)),
     }
 
 
-def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, List[str]]) -> Dict[str, Any]:
+def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) -> Dict[str, Any]:
     def pick_all_when_empty(name: str) -> List[str]:
         selected = request.args.getlist(name)
         if selected:
             return selected
         return list(pdf_options.get(name, []))
+
+    selected_unit_nodes = request.args.getlist("unit_nodes")
+    if not selected_unit_nodes:
+        selected_unit_nodes = default_selected_unit_nodes()
 
     return {
         "schools": pick_all_when_empty("schools"),
@@ -311,12 +340,14 @@ def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, List[str
         "semesters": pick_all_when_empty("semesters"),
         "exams": pick_all_when_empty("exams"),
         "units": pick_all_when_empty("units"),
+        "unit_nodes": selected_unit_nodes,
         "levels": pick_all_when_empty("levels"),
         "source_numbers": pick_all_when_empty("source_numbers"),
         "pattern": request.args.get("selector_pattern", ""),
         "selector_ids": request.args.get("selector_ids", ""),
         "question_count": request.args.get("question_count", "0"),
         "show_source_info": request.args.get("show_source_info", "1") != "0",
+        "teacher_view": request.args.get("teacher_view", "0") == "1",
         "title": request.args.get(
             "title",
             f"{defaults['school']} {defaults['year']} G{defaults['grade']} S{defaults['semester']} {defaults['exam']}",
@@ -636,13 +667,19 @@ def ingest():
 
 @app.post("/render")
 def render_pdf():
+    def _first_or(values: List[str], fallback: str) -> str:
+        return values[0] if values else fallback
+
     defaults = _current_defaults()
     schools = _normalize_values(request.form.getlist("schools"), upper=True)
     years = _normalize_values(request.form.getlist("years"))
     grades = _normalize_values(request.form.getlist("grades"))
     semesters = _normalize_values(request.form.getlist("semesters"))
     exams = _normalize_values(request.form.getlist("exams"), upper=True)
-    units = _normalize_values(request.form.getlist("units"))
+    unit_nodes = _normalize_values(request.form.getlist("unit_nodes"))
+    if not unit_nodes:
+        unit_nodes = default_selected_unit_nodes()
+    units = expand_unit_nodes_to_leaf_paths(unit_nodes)
     levels = _normalize_values(request.form.getlist("levels"))
     source_numbers = _normalize_values(request.form.getlist("source_numbers"))
 
@@ -650,6 +687,9 @@ def render_pdf():
     pattern = request.form.get("selector_pattern", "").strip()
     question_count = max(_parse_int(request.form.get("question_count", "0"), 0), 0)
     show_source_info = bool(request.form.get("show_source_info"))
+    teacher_view = bool(request.form.get("teacher_view"))
+    append_answer_sheet = bool(request.form.get("answer_sheet"))
+    append_solution_sheet = bool(request.form.get("solution_sheet"))
 
     problem_meta = _scan_problem_meta()
     available_ids = {item["id"] for item in problem_meta}
@@ -689,11 +729,11 @@ def render_pdf():
     if not selected_problem_ids:
         flash("선택 조건에 해당하는 문항이 없습니다.", "warning")
         next_defaults = {
-            "school": schools[0],
-            "year": years[0],
-            "grade": grades[0],
-            "semester": semesters[0],
-            "exam": exams[0],
+            "school": _first_or(schools, defaults["school"]),
+            "year": _first_or(years, defaults["year"]),
+            "grade": _first_or(grades, defaults["grade"]),
+            "semester": _first_or(semesters, defaults["semester"]),
+            "exam": _first_or(exams, defaults["exam"]),
             "subjective_offset": defaults.get("subjective_offset", "100"),
             "ocr_lang": defaults.get("ocr_lang", "kor+eng"),
             "ai_provider": defaults.get("ai_provider", "gemini"),
@@ -711,12 +751,13 @@ def render_pdf():
             "grades": grades,
             "semesters": semesters,
             "exams": exams,
-            "units": units,
+            "unit_nodes": unit_nodes,
             "levels": levels,
             "source_numbers": source_numbers,
             "selector_pattern": pattern,
             "question_count": str(question_count),
             "show_source_info": "1" if show_source_info else "0",
+            "teacher_view": "1" if teacher_view else "0",
         }
         return redirect(url_for("index", **next_defaults))
 
@@ -741,7 +782,9 @@ def render_pdf():
         "--title",
         request.form.get(
             "title",
-            f"{schools[0]} {years[0]} G{grades[0]} S{semesters[0]} {exams[0]}",
+            f"{_first_or(schools, defaults['school'])} {_first_or(years, defaults['year'])} "
+            f"G{_first_or(grades, defaults['grade'])} S{_first_or(semesters, defaults['semester'])} "
+            f"{_first_or(exams, defaults['exam'])}",
         ),
         "--ids",
         ",".join(selected_problem_ids),
@@ -749,8 +792,10 @@ def render_pdf():
 
     if show_source_info:
         cmd.append("--show-source-info")
+    if teacher_view:
+        cmd.append("--teacher-view")
 
-    if request.form.get("answer_sheet"):
+    if append_answer_sheet:
         answer_name = request.form.get("answer_name", "").strip() or "answer_sheet_web.pdf"
         answer_name = Path(answer_name).name
         if not answer_name.lower().endswith(".pdf"):
@@ -758,13 +803,16 @@ def render_pdf():
         answer_path = _resolve_unique_pdf_path(OUTPUT_DIR / answer_name)
         cmd.extend(["--answer-sheet", str(answer_path)])
 
-    if request.form.get("solution_sheet"):
+    if append_solution_sheet:
         solution_name = request.form.get("solution_name", "").strip() or "solution_sheet_web.pdf"
         solution_name = Path(solution_name).name
         if not solution_name.lower().endswith(".pdf"):
             solution_name = f"{solution_name}.pdf"
         solution_path = _resolve_unique_pdf_path(OUTPUT_DIR / solution_name)
         cmd.extend(["--solution-sheet", str(solution_path)])
+
+    if append_answer_sheet or append_solution_sheet:
+        cmd.append("--append-sheets-to-out")
 
     completed = subprocess.run(
         cmd,
@@ -787,6 +835,8 @@ def render_pdf():
     else:
         flash(f"PDF 생성 완료: {out_path}", "success")
         flash(f"출제 문항수: {len(selected_problem_ids)}", "info")
+        if append_answer_sheet or append_solution_sheet:
+            flash("체크된 답안지/해설지가 시험지 뒤에 병합된 단일 PDF로 생성되었습니다.", "info")
         if completed.stdout.strip():
             for line in completed.stdout.strip().splitlines()[:20]:
                 flash(line, "info")
@@ -795,11 +845,11 @@ def render_pdf():
                 flash(line, "warning")
 
     next_defaults = {
-        "school": schools[0],
-        "year": years[0],
-        "grade": grades[0],
-        "semester": semesters[0],
-        "exam": exams[0],
+        "school": _first_or(schools, defaults["school"]),
+        "year": _first_or(years, defaults["year"]),
+        "grade": _first_or(grades, defaults["grade"]),
+        "semester": _first_or(semesters, defaults["semester"]),
+        "exam": _first_or(exams, defaults["exam"]),
         "subjective_offset": defaults.get("subjective_offset", "100"),
         "ocr_lang": defaults.get("ocr_lang", "kor+eng"),
         "ai_provider": defaults.get("ai_provider", "gemini"),
@@ -817,16 +867,19 @@ def render_pdf():
         "grades": grades,
         "semesters": semesters,
         "exams": exams,
-        "units": units,
+        "unit_nodes": unit_nodes,
         "levels": levels,
         "source_numbers": source_numbers,
         "selector_pattern": pattern,
         "question_count": str(question_count),
         "show_source_info": "1" if show_source_info else "0",
+        "teacher_view": "1" if teacher_view else "0",
         "selector_ids": " ".join(selector_ids),
         "title": request.form.get(
             "title",
-            f"{schools[0]} {years[0]} G{grades[0]} S{semesters[0]} {exams[0]}",
+            f"{_first_or(schools, defaults['school'])} {_first_or(years, defaults['year'])} "
+            f"G{_first_or(grades, defaults['grade'])} S{_first_or(semesters, defaults['semester'])} "
+            f"{_first_or(exams, defaults['exam'])}",
         ),
     }
     return redirect(url_for("index", **next_defaults))

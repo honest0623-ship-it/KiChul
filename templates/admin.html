@@ -27,6 +27,52 @@
       margin: 0 0 6px;
       font-size: 18px;
     }
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .card-head h2 {
+      margin: 0;
+    }
+    .fold-btn {
+      border: 1px solid #c3cdd8;
+      background: #fff;
+      color: #334155;
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1;
+      transform: rotate(-90deg);
+      transition: transform 0.18s ease, background-color 0.15s ease;
+    }
+    .fold-btn:hover {
+      background: #eef4fb;
+    }
+    .fold-btn.is-open {
+      transform: rotate(0deg);
+    }
+    .fold-body {
+      margin-top: 8px;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+      white-space: nowrap;
+    }
     .top-row {
       display: flex;
       justify-content: space-between;
@@ -144,6 +190,43 @@
       border-radius: 6px;
     }
     .check-item:hover { background: #eef4fb; }
+    .unit-tree {
+      border: 1px solid #c3cdd8;
+      border-radius: 8px;
+      background: #fff;
+      min-height: 110px;
+      max-height: 220px;
+      overflow: auto;
+      padding: 8px;
+    }
+    .unit-node {
+      display: block;
+      margin: 2px 0;
+    }
+    .unit-node > label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #374151;
+      padding: 3px 6px;
+      border-radius: 6px;
+      margin: 0;
+    }
+    .unit-node > label:hover {
+      background: #eef4fb;
+    }
+    .unit-node.level-1 > label {
+      font-weight: 800;
+      color: #1f2937;
+    }
+    .unit-node.level-2 {
+      margin-left: 14px;
+    }
+    .unit-node.level-3 {
+      margin-left: 30px;
+    }
     .flash-stack { display: grid; gap: 8px; margin-bottom: 12px; }
     .flash {
       border: 1px solid #d9e0e7;
@@ -195,15 +278,27 @@
     {% endwith %}
 
     <section class="card">
-      <h2>1) 이미지 업로드</h2>
-      <p class="path-line">Staging: {{ original_dir }}</p>
-      <form method="post" action="/upload" enctype="multipart/form-data">
-        <label for="images">이미지 파일 (복수 선택)</label>
-        <input id="images" type="file" name="images" accept=".png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff" multiple required />
-        <div class="inline">
-          <button class="btn" type="submit">업로드</button>
-        </div>
-      </form>
+      <div class="card-head">
+        <h2>1) 이미지 업로드</h2>
+        <button
+          class="fold-btn js-toggle-card"
+          type="button"
+          data-target-id="panel-upload"
+          aria-controls="panel-upload"
+          aria-expanded="false"
+          title="펼치기/접기"
+        ><span aria-hidden="true">&lt;</span><span class="sr-only">이미지 업로드 패널 펼치기/접기</span></button>
+      </div>
+      <div id="panel-upload" class="fold-body" hidden>
+        <p class="path-line">Staging: {{ original_dir }}</p>
+        <form method="post" action="/upload" enctype="multipart/form-data">
+          <label for="images">이미지 파일 (복수 선택)</label>
+          <input id="images" type="file" name="images" accept=".png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff" multiple required />
+          <div class="inline">
+            <button class="btn" type="submit">업로드</button>
+          </div>
+        </form>
+      </div>
     </section>
 
     <section class="card">
@@ -215,7 +310,18 @@
     </section>
 
     <section class="card">
-      <h2>2) DB 자동 생성</h2>
+      <div class="card-head">
+        <h2>2) DB 자동 생성</h2>
+        <button
+          class="fold-btn js-toggle-card"
+          type="button"
+          data-target-id="panel-ingest"
+          aria-controls="panel-ingest"
+          aria-expanded="false"
+          title="펼치기/접기"
+        ><span aria-hidden="true">&lt;</span><span class="sr-only">DB 자동 생성 패널 펼치기/접기</span></button>
+      </div>
+      <div id="panel-ingest" class="fold-body" hidden>
       <p class="path-line">Problems Root: {{ problems_dir }}</p>
       <form method="post" action="/ingest">
         <div class="meta-grid">
@@ -308,6 +414,7 @@
           <button class="btn secondary" type="submit" name="action" value="refresh_models" formnovalidate>선택 AI 모델 목록 갱신</button>
         </div>
       </form>
+      </div>
     </section>
 
     <section class="card">
@@ -402,19 +509,66 @@
           </div>
           <div>
             <label>단원 (복수선택)</label>
-            <div id="unit-panel" class="check-panel">
-              {% if pdf_options.units %}
-                {% for value in pdf_options.units %}
-                  {% set item_id = "render_unit_" ~ loop.index %}
-                  <label class="check-item" for="{{ item_id }}"><input id="{{ item_id }}" type="checkbox" name="units" value="{{ value }}" {% if value in pdf_selected.units %}checked{% endif %} /><span>{{ value }}</span></label>
+            <div id="unit-panel" class="unit-tree">
+              {% if pdf_options.unit_tree %}
+                {% for subject in pdf_options.unit_tree %}
+                  {% set sid = "unit_" ~ subject.id|replace(":", "_")|replace(">", "_")|replace(" ", "_")|replace("(", "")|replace(")", "") %}
+                  <div class="unit-node level-1">
+                    <label for="{{ sid }}">
+                      <input
+                        id="{{ sid }}"
+                        type="checkbox"
+                        name="unit_nodes"
+                        value="{{ subject.id }}"
+                        data-node-id="{{ subject.id }}"
+                        data-parent-id=""
+                        {% if subject.id in pdf_selected.unit_nodes %}checked{% endif %}
+                      />
+                      <span>{{ subject.label }}</span>
+                    </label>
+                  </div>
+                  {% for l2 in subject.children %}
+                    {% set l2id = "unit_" ~ l2.id|replace(":", "_")|replace(">", "_")|replace(" ", "_")|replace("(", "")|replace(")", "") %}
+                    <div class="unit-node level-2">
+                      <label for="{{ l2id }}">
+                        <input
+                          id="{{ l2id }}"
+                          type="checkbox"
+                          name="unit_nodes"
+                          value="{{ l2.id }}"
+                          data-node-id="{{ l2.id }}"
+                          data-parent-id="{{ subject.id }}"
+                          {% if l2.id in pdf_selected.unit_nodes %}checked{% endif %}
+                        />
+                        <span>{{ l2.label }}</span>
+                      </label>
+                    </div>
+                    {% for l3 in l2.children %}
+                      {% set l3id = "unit_" ~ l3.id|replace(":", "_")|replace(">", "_")|replace(" ", "_")|replace("(", "")|replace(")", "") %}
+                      <div class="unit-node level-3">
+                        <label for="{{ l3id }}">
+                          <input
+                            id="{{ l3id }}"
+                            type="checkbox"
+                            name="unit_nodes"
+                            value="{{ l3.id }}"
+                            data-node-id="{{ l3.id }}"
+                            data-parent-id="{{ l2.id }}"
+                            {% if l3.id in pdf_selected.unit_nodes %}checked{% endif %}
+                          />
+                          <span>{{ l3.label }}</span>
+                        </label>
+                      </div>
+                    {% endfor %}
+                  {% endfor %}
                 {% endfor %}
               {% else %}
                 <p class="muted">선택 가능한 값 없음</p>
               {% endif %}
             </div>
             <div class="inline" style="margin-top: 6px;">
-              <button class="btn secondary js-select-all" type="button" data-target-panel="unit-panel" data-target-name="units" style="padding: 6px 10px;">전체 선택</button>
-              <button class="btn secondary js-clear-all" type="button" data-target-panel="unit-panel" data-target-name="units" style="padding: 6px 10px;">전체 해제</button>
+              <button class="btn secondary js-select-all-unit" type="button" style="padding: 6px 10px;">전체 선택</button>
+              <button class="btn secondary js-clear-all-unit" type="button" style="padding: 6px 10px;">전체 해제</button>
             </div>
           </div>
           <div>
@@ -465,6 +619,7 @@
 
         <div class="inline">
           <label><input type="checkbox" name="show_source_info" {% if pdf_selected.show_source_info %}checked{% endif %} /> 문항별 기출정보 표시</label>
+          <label><input type="checkbox" name="teacher_view" {% if pdf_selected.teacher_view %}checked{% endif %} /> 교사용 출력(문항 아래 정답 표시)</label>
           <label><input type="checkbox" name="answer_sheet" /> 답안지 PDF 생성</label>
           <label>답안지 파일명 <input type="text" name="answer_name" value="answer_sheet_web.pdf" style="width: 200px;" /></label>
           <label><input type="checkbox" name="solution_sheet" /> 해설지 PDF 생성(정답+해설)</label>
@@ -480,6 +635,8 @@
 
   <script>
     (function () {
+      const unitPanel = document.getElementById("unit-panel");
+
       const setChecked = (panelId, inputName, checked) => {
         const panel = document.getElementById(panelId);
         if (!panel || !inputName) return;
@@ -498,6 +655,122 @@
         btn.addEventListener("click", () => {
           setChecked(btn.dataset.targetPanel, btn.dataset.targetName, false);
         });
+      });
+
+      const buildUnitMaps = () => {
+        if (!unitPanel) return null;
+        const boxes = Array.from(unitPanel.querySelectorAll('input[type="checkbox"][name="unit_nodes"]'));
+        const byId = new Map();
+        const childrenMap = new Map();
+        const parentMap = new Map();
+
+        boxes.forEach((box) => {
+          const nodeId = box.dataset.nodeId || "";
+          const parentId = box.dataset.parentId || "";
+          if (!nodeId) return;
+          byId.set(nodeId, box);
+          parentMap.set(nodeId, parentId);
+          if (parentId) {
+            if (!childrenMap.has(parentId)) childrenMap.set(parentId, []);
+            childrenMap.get(parentId).push(nodeId);
+          }
+        });
+
+        return { byId, childrenMap, parentMap };
+      };
+
+      const unitMaps = buildUnitMaps();
+
+      const setDescendantsChecked = (nodeId, checked) => {
+        if (!unitMaps) return;
+        const stack = [nodeId];
+        while (stack.length > 0) {
+          const current = stack.pop();
+          const children = unitMaps.childrenMap.get(current) || [];
+          children.forEach((childId) => {
+            const childBox = unitMaps.byId.get(childId);
+            if (!childBox) return;
+            childBox.checked = checked;
+            childBox.indeterminate = false;
+            stack.push(childId);
+          });
+        }
+      };
+
+      const refreshAncestorState = (nodeId) => {
+        if (!unitMaps) return;
+        let parentId = unitMaps.parentMap.get(nodeId) || "";
+        while (parentId) {
+          const parentBox = unitMaps.byId.get(parentId);
+          const childIds = unitMaps.childrenMap.get(parentId) || [];
+          const childBoxes = childIds.map((id) => unitMaps.byId.get(id)).filter(Boolean);
+          if (!parentBox || childBoxes.length === 0) break;
+
+          const allChecked = childBoxes.every((box) => box.checked && !box.indeterminate);
+          const noneChecked = childBoxes.every((box) => !box.checked && !box.indeterminate);
+          if (allChecked) {
+            parentBox.checked = true;
+            parentBox.indeterminate = false;
+          } else if (noneChecked) {
+            parentBox.checked = false;
+            parentBox.indeterminate = false;
+          } else {
+            parentBox.checked = false;
+            parentBox.indeterminate = true;
+          }
+          parentId = unitMaps.parentMap.get(parentId) || "";
+        }
+      };
+
+      const initUnitTree = () => {
+        if (!unitMaps) return;
+        unitMaps.byId.forEach((box, nodeId) => {
+          if (box.checked) {
+            setDescendantsChecked(nodeId, true);
+          }
+        });
+        unitMaps.byId.forEach((box, nodeId) => {
+          box.addEventListener("change", () => {
+            setDescendantsChecked(nodeId, box.checked);
+            refreshAncestorState(nodeId);
+          });
+        });
+        unitMaps.byId.forEach((_, nodeId) => refreshAncestorState(nodeId));
+      };
+
+      const setAllUnitNodes = (checked) => {
+        if (!unitMaps) return;
+        unitMaps.byId.forEach((box) => {
+          box.checked = checked;
+          box.indeterminate = false;
+        });
+      };
+
+      document.querySelectorAll(".js-select-all-unit").forEach((btn) => {
+        btn.addEventListener("click", () => setAllUnitNodes(true));
+      });
+
+      document.querySelectorAll(".js-clear-all-unit").forEach((btn) => {
+        btn.addEventListener("click", () => setAllUnitNodes(false));
+      });
+
+      initUnitTree();
+
+      const toggleCard = (button) => {
+        const targetId = button.dataset.targetId;
+        if (!targetId) return;
+        const panel = document.getElementById(targetId);
+        if (!panel) return;
+
+        const expanded = button.getAttribute("aria-expanded") === "true";
+        const nextExpanded = !expanded;
+        button.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+        button.classList.toggle("is-open", nextExpanded);
+        panel.hidden = !nextExpanded;
+      };
+
+      document.querySelectorAll(".js-toggle-card").forEach((btn) => {
+        btn.addEventListener("click", () => toggleCard(btn));
       });
     })();
   </script>

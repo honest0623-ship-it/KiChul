@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
+
+from unit_taxonomy import normalize_unit_triplet
 
 
 @dataclass(frozen=True)
@@ -15,8 +17,7 @@ class UnitLevelResult:
 
     @property
     def unit_path(self) -> str:
-        parts = [self.unit_l1.strip(), self.unit_l2.strip(), self.unit_l3.strip()]
-        return " > ".join([item for item in parts if item])
+        return ">".join([self.unit_l1.strip(), self.unit_l2.strip(), self.unit_l3.strip()])
 
 
 @dataclass(frozen=True)
@@ -30,114 +31,88 @@ class UnitRule:
     min_hits: int = 1
 
 
-# Practical taxonomy table for high-school math DB tagging.
-# This is intentionally concise and can be extended as data grows.
-STANDARD_TAXONOMY: Dict[int, Dict[str, Dict[str, Sequence[str]]]] = {
-    1: {
-        "공통수학1": {
-            "다항식": ("다항식의 연산", "나머지정리/인수정리", "인수분해"),
-            "방정식과 부등식": ("복소수", "이차방정식", "이차방정식과 이차함수"),
-            "경우의 수": ("순열", "조합"),
-            "행렬": ("행렬의 뜻", "행렬의 연산"),
-        },
-        "공통수학2": {
-            "함수": ("함수의 뜻", "이차함수", "합성함수/역함수"),
-            "도형의 방정식": ("직선", "원", "도형의 이동"),
-            "집합과 명제": ("집합의 연산", "명제", "조건의 활용"),
-        },
-    },
-    2: {
-        "대수": {
-            "지수함수와 로그함수": ("지수", "로그", "지수/로그함수"),
-            "삼각함수": ("삼각함수의 정의", "삼각함수의 그래프", "삼각함수의 활용"),
-            "수열": ("등차/등비수열", "수열의 합", "점화식"),
-        },
-        "미적분": {
-            "극한과 연속": ("함수의 극한", "함수의 연속"),
-            "미분법": ("도함수", "미분계수", "도함수의 활용"),
-            "적분법": ("부정적분", "정적분", "적분의 활용"),
-        },
-        "확률과통계": {
-            "경우의 수": ("순열과 조합", "중복조합"),
-            "확률": ("확률의 뜻", "조건부확률", "독립시행"),
-            "통계": ("확률분포", "통계적 추정"),
-        },
-        "기하": {
-            "이차곡선": ("포물선", "타원", "쌍곡선"),
-            "평면벡터": ("벡터의 연산", "벡터의 내적"),
-            "공간도형과 공간좌표": ("직선과 평면", "공간좌표"),
-        },
-    },
-    3: {
-        "미적분": {
-            "극한과 연속": ("극한의 활용", "연속조건"),
-            "미분법": ("매개변수 미분", "접선/법선", "최적화"),
-            "적분법": ("치환적분", "부분적분", "정적분의 응용"),
-        },
-        "확률과통계": {
-            "확률": ("조건부확률 심화", "확률분포 심화"),
-            "통계": ("추정과 검정 기초",),
-        },
-        "기하": {
-            "벡터": ("공간벡터", "벡터 방정식"),
-            "공간좌표": ("공간도형의 방정식",),
-        },
-        "대수": {
-            "수열": ("귀납적 정의", "수열의 극한적 해석"),
-            "삼각함수": ("삼각함수 방정식/부등식"),
-        },
-    },
-}
+def _rule(
+    unit_l1: str,
+    unit_l2: str,
+    unit_l3: str,
+    keywords: Sequence[str],
+    grades: Optional[Sequence[int]] = None,
+    weight: int = 1,
+    min_hits: int = 1,
+) -> UnitRule:
+    l1, l2, l3 = normalize_unit_triplet(unit_l1, unit_l2, unit_l3)
+    return UnitRule(
+        unit_l1=l1,
+        unit_l2=l2,
+        unit_l3=l3,
+        keywords=keywords,
+        grades=grades,
+        weight=weight,
+        min_hits=min_hits,
+    )
 
 
 RULES: List[UnitRule] = [
-    # Grade 1: common math
-    UnitRule("공통수학1", "다항식", "나머지정리/인수정리", ("나머지", "인수정리", "x-1", "x^2", "x^3"), grades=(1,), weight=3),
-    UnitRule("공통수학1", "다항식", "인수분해", ("인수분해", "인수인", "곱셈공식"), grades=(1,), weight=3),
-    UnitRule("공통수학1", "방정식과 부등식", "복소수", ("복소수", "허수", "켤레복소수", "허수부", "실수부", "i"), grades=(1,), weight=3),
-    UnitRule("공통수학1", "방정식과 부등식", "이차방정식", ("이차방정식", "판별식", "중근", "두 근", "근과 계수"), grades=(1,), weight=3),
-    UnitRule("공통수학1", "경우의 수", "순열", ("순열", "경우의 수"), grades=(1, 2), weight=2),
-    UnitRule("공통수학1", "경우의 수", "조합", ("조합", "경우의 수"), grades=(1, 2), weight=2),
-    UnitRule("공통수학1", "방정식과 부등식", "이차방정식과 이차함수", ("이차함수", "그래프", "최댓값", "최솟값", "축"), grades=(1,), weight=3),
-    UnitRule("공통수학2", "도형의 방정식", "직선", ("직선", "기울기", "거리"), grades=(1,), weight=2),
-    UnitRule("공통수학2", "도형의 방정식", "원", ("원", "반지름", "원점", "중심"), grades=(1,), weight=2),
-    UnitRule("공통수학2", "집합과 명제", "명제", ("명제", "필요조건", "충분조건", "참", "거짓"), grades=(1,), weight=2),
-    UnitRule("공통수학2", "행렬", "행렬의 연산", ("행렬", "det", "역행렬"), grades=(1,), weight=2),
-
-    # Grade 2~3: algebra / calculus / probability-statistics / geometry
-    UnitRule("대수", "지수함수와 로그함수", "지수/로그", ("지수", "로그", "log", "밑"), grades=(2, 3), weight=3),
-    UnitRule("대수", "삼각함수", "삼각함수", ("삼각함수", "sin", "cos", "tan", "라디안"), grades=(2, 3), weight=3),
-    UnitRule("대수", "수열", "등차/등비수열", ("수열", "등차", "등비", "점화식", "시그마"), grades=(2, 3), weight=3),
-
-    UnitRule("미적분", "극한과 연속", "함수의 극한", ("극한", "lim", "수렴"), grades=(2, 3), weight=3),
-    UnitRule("미적분", "극한과 연속", "함수의 연속", ("연속", "불연속"), grades=(2, 3), weight=3),
-    UnitRule("미적분", "미분법", "도함수", ("미분", "도함수", "미분계수", "접선", "법선"), grades=(2, 3), weight=3),
-    UnitRule("미적분", "미분법", "도함수의 활용", ("증가", "감소", "극대", "극소", "최적화"), grades=(2, 3), weight=2),
-    UnitRule("미적분", "적분법", "정적분/부정적분", ("적분", "정적분", "부정적분", "넓이"), grades=(2, 3), weight=3),
-
-    UnitRule("확률과통계", "경우의 수", "순열과 조합", ("경우의 수", "순열", "조합", "중복조합"), grades=(2, 3), weight=3),
-    UnitRule("확률과통계", "확률", "조건부확률", ("확률", "조건부확률", "독립", "사건"), grades=(2, 3), weight=3),
-    UnitRule("확률과통계", "통계", "확률분포/통계적 추정", ("확률분포", "기댓값", "분산", "표준편차", "정규분포"), grades=(2, 3), weight=3),
-
-    UnitRule("기하", "이차곡선", "포물선/타원/쌍곡선", ("이차곡선", "포물선", "타원", "쌍곡선"), grades=(2, 3), weight=3),
-    UnitRule("기하", "평면벡터", "벡터의 연산/내적", ("벡터", "내적", "벡터의 크기"), grades=(2, 3), weight=3),
-    UnitRule("기하", "공간도형과 공간좌표", "공간좌표", ("공간좌표", "평면", "직선", "공간"), grades=(2, 3), weight=2),
+    # 공통수학1(2022개정)
+    _rule("공통수학1(2022개정)", "1. 다항식", "1-1. 다항식의 연산", ("다항식", "항", "계수", "전개", "정리"), grades=(1,), weight=2),
+    _rule("공통수학1(2022개정)", "1. 다항식", "1-2. 나머지정리", ("나머지", "인수정리", "f(", "x-a", "다항식의 나눗셈"), grades=(1,), weight=3),
+    _rule("공통수학1(2022개정)", "1. 다항식", "1-3. 인수분해", ("인수분해", "곱셈공식", "완전제곱", "인수"), grades=(1,), weight=3),
+    _rule("공통수학1(2022개정)", "2. 방정식과 부등식", "2-1. 복소수와 이차방정식", ("복소수", "허수", "켤레", "이차방정식", "판별식", "근과 계수", "실근"), grades=(1,), weight=3),
+    _rule("공통수학1(2022개정)", "2. 방정식과 부등식", "2-2. 이차방정식과 이차함수", ("이차함수", "포물선", "축", "최댓값", "최솟값", "그래프"), grades=(1,), weight=3),
+    _rule("공통수학1(2022개정)", "2. 방정식과 부등식", "2-3. 여러 가지 방정식", ("삼차방정식", "사차방정식", "연립방정식", "여러 가지 방정식"), grades=(1,), weight=3),
+    _rule("공통수학1(2022개정)", "2. 방정식과 부등식", "2-4. 여러 가지 부등식", ("부등식", "절댓값", "연립부등식", "여러 가지 부등식"), grades=(1,), weight=3),
+    _rule("공통수학1(2022개정)", "2. 방정식과 부등식", "2-5. 여러 가지 방정식(교육과정 외)", ("교육과정 외",), grades=(1,), weight=5),
+    _rule("공통수학1(2022개정)", "3. 경우의 수", "3-1. 합의 법칙과 곱의 법칙", ("합의 법칙", "곱의 법칙", "경우의 수"), grades=(1, 2), weight=2),
+    _rule("공통수학1(2022개정)", "3. 경우의 수", "3-2. 순열과 조합", ("순열", "조합", "중복순열", "중복조합", "이항계수"), grades=(1, 2), weight=3),
+    _rule("공통수학1(2022개정)", "4. 행렬", "4-1. 행렬과 그 연산", ("행렬", "역행렬", "행렬식", "det", "성분", "AB=BA"), grades=(1,), weight=4),
+    # 공통수학2(2022개정)
+    _rule("공통수학2(2022개정)", "1. 도형의 방정식", "1-1. 평면좌표", ("평면좌표", "좌표평면", "거리", "중점"), grades=(1,), weight=3),
+    _rule("공통수학2(2022개정)", "1. 도형의 방정식", "1-2. 직선의 방정식", ("직선의 방정식", "직선", "기울기"), grades=(1,), weight=3),
+    _rule("공통수학2(2022개정)", "1. 도형의 방정식", "1-3. 원의 방정식", ("원의 방정식", "반지름", "중심", "원"), grades=(1,), weight=3),
+    _rule("공통수학2(2022개정)", "1. 도형의 방정식", "1-4. 도형의 이동", ("도형의 이동", "평행이동", "대칭이동", "회전"), grades=(1,), weight=3),
+    _rule("공통수학2(2022개정)", "2. 집합과 명제", "2-1. 집합", ("집합", "합집합", "교집합", "차집합", "원소"), grades=(1,), weight=3),
+    _rule("공통수학2(2022개정)", "2. 집합과 명제", "2-2. 명제", ("명제", "필요조건", "충분조건", "대우", "역"), grades=(1,), weight=3),
+    _rule("공통수학2(2022개정)", "3. 함수", "3-1. 함수", ("함수", "정의역", "치역", "함숫값", "합성함수", "역함수"), grades=(1,), weight=2),
+    _rule("공통수학2(2022개정)", "3. 함수", "3-2. 유리함수", ("유리함수",), grades=(1,), weight=4),
+    _rule("공통수학2(2022개정)", "3. 함수", "3-3. 무리함수", ("무리함수",), grades=(1,), weight=4),
+    _rule("공통수학2(2022개정)", "3. 함수", "3-4. 여러 가지 함수의 그래프(교육과정 외)", ("교육과정 외", "여러 가지 함수의 그래프"), grades=(1,), weight=5),
+    # 대수(2022개정)
+    _rule("대수(2022개정)", "1. 지수함수와 로그함수", "1-1. 지수와 로그", ("지수", "로그", "log", "밑", "지수법칙", "로그법칙"), grades=(2, 3), weight=3),
+    _rule("대수(2022개정)", "1. 지수함수와 로그함수", "1-2. 지수함수", ("지수함수",), grades=(2, 3), weight=4),
+    _rule("대수(2022개정)", "1. 지수함수와 로그함수", "1-3. 로그함수", ("로그함수",), grades=(2, 3), weight=4),
+    _rule("대수(2022개정)", "2. 삼각함수", "2-1. 삼각함수", ("삼각함수", "sin", "cos", "tan", "라디안"), grades=(2, 3), weight=3),
+    _rule("대수(2022개정)", "2. 삼각함수", "2-2. 삼각함수의 그래프", ("삼각함수의 그래프", "주기", "위상"), grades=(2, 3), weight=4),
+    _rule("대수(2022개정)", "2. 삼각함수", "2-3. 삼각함수의 활용", ("삼각함수의 활용", "삼각방정식", "삼각부등식"), grades=(2, 3), weight=4),
+    _rule("대수(2022개정)", "3. 수열", "3-1. 등차수열", ("등차수열",), grades=(2, 3), weight=4),
+    _rule("대수(2022개정)", "3. 수열", "3-2. 등비수열", ("등비수열",), grades=(2, 3), weight=4),
+    _rule("대수(2022개정)", "3. 수열", "3-3. 수열의 합", ("수열의 합", "시그마", "Σ"), grades=(2, 3), weight=4),
+    _rule("대수(2022개정)", "3. 수열", "3-4. 수학적귀납법", ("수학적귀납법", "귀납"), grades=(2, 3), weight=4),
+    # 미적분 I(2022개정)
+    _rule("미적분 I(2022개정)", "1. 함수의 극한과 연속", "1-1. 함수의 극한", ("극한", "lim", "수렴"), grades=(2, 3), weight=4),
+    _rule("미적분 I(2022개정)", "1. 함수의 극한과 연속", "1-2. 함수의 연속", ("연속", "불연속"), grades=(2, 3), weight=4),
+    _rule("미적분 I(2022개정)", "2. 미분", "2-1. 미분계수와 도함수", ("미분계수", "도함수", "미분"), grades=(2, 3), weight=3),
+    _rule("미적분 I(2022개정)", "2. 미분", "2-2. 도함수의 활용", ("도함수의 활용", "접선", "증가", "감소", "극대", "극소"), grades=(2, 3), weight=4),
+    _rule("미적분 I(2022개정)", "3. 적분", "3-1. 부정적분", ("부정적분",), grades=(2, 3), weight=4),
+    _rule("미적분 I(2022개정)", "3. 적분", "3-2. 정적분", ("정적분",), grades=(2, 3), weight=3),
+    _rule("미적분 I(2022개정)", "3. 적분", "3-3. 정적분의 활용", ("정적분의 활용", "면적", "속도", "거리"), grades=(2, 3), weight=4),
+    # 확률과 통계(2022개정)
+    _rule("확률과 통계(2022개정)", "1. 경우의 수", "1-1. 순열", ("순열",), grades=(2, 3), weight=4),
+    _rule("확률과 통계(2022개정)", "1. 경우의 수", "1-2. 조합", ("조합", "이항정리"), grades=(2, 3), weight=4),
+    _rule("확률과 통계(2022개정)", "2. 확률", "2-1. 확률의 뜻과 활용", ("확률", "사건", "표본공간", "여사건", "독립"), grades=(2, 3), weight=3),
+    _rule("확률과 통계(2022개정)", "2. 확률", "2-2. 조건부 확률", ("조건부확률", "베이즈"), grades=(2, 3), weight=4),
+    _rule("확률과 통계(2022개정)", "3. 통계", "3-1. 확률분포", ("확률분포", "기댓값", "분산", "표준편차", "정규분포"), grades=(2, 3), weight=4),
+    _rule("확률과 통계(2022개정)", "3. 통계", "3-2. 통계적 추정", ("통계적 추정", "신뢰구간", "모평균", "가설검정", "추정"), grades=(2, 3), weight=4),
 ]
 
 
 def _normalize_text(*chunks: str) -> str:
     merged = "\n".join([chunk for chunk in chunks if chunk])
     merged = merged.lower().strip()
-    merged = re.sub(r"\s+", " ", merged)
-    return merged
+    return re.sub(r"\s+", " ", merged)
 
 
 def _grade_fallback(grade: Optional[int]) -> Tuple[str, str, str]:
-    if grade == 1:
-        return ("공통수학1", "기타", "미분류")
-    if grade in {2, 3}:
-        return ("대수", "기타", "미분류")
-    return ("공통수학", "기타", "미분류")
+    return normalize_unit_triplet("", "", "", grade=grade)
 
 
 def _is_subjective(problem_no: Optional[int], qtype: str, choices_text: str) -> bool:
@@ -146,10 +121,7 @@ def _is_subjective(problem_no: Optional[int], qtype: str, choices_text: str) -> 
     qtoken = (qtype or "").lower().strip()
     if any(token in qtoken for token in ("subjective", "short", "descriptive", "서답", "단답", "서술")):
         return True
-    # No choices usually means short-answer/descriptive.
-    if not (choices_text or "").strip():
-        return True
-    return False
+    return not bool((choices_text or "").strip())
 
 
 def _score_rule(rule: UnitRule, text: str, grade: Optional[int]) -> Tuple[int, int]:
@@ -178,19 +150,8 @@ def _estimate_level(
     if _is_subjective(problem_no=problem_no, qtype=qtype, choices_text=choices_text):
         level += 1
 
-    hard_tokens = (
-        "증명",
-        "항상",
-        "모든",
-        "범위",
-        "조건을 만족",
-        "매개변수",
-        "극한",
-        "미분",
-        "적분",
-    )
-    hard_hit = sum(1 for token in hard_tokens if token in text)
-    if hard_hit >= 2:
+    hard_tokens = ("증명", "항상", "모든", "범위", "조건을 만족", "극한", "미분", "적분")
+    if sum(1 for token in hard_tokens if token in text) >= 2:
         level += 1
 
     easy_tokens = ("인수분해", "나머지", "기본 계산", "단순 계산")
@@ -200,7 +161,6 @@ def _estimate_level(
     if len(solution_text) > 550:
         level += 1
 
-    # Very short objective stems tend to be easier.
     if len(text) < 120 and not _is_subjective(problem_no, qtype, choices_text):
         level -= 1
 

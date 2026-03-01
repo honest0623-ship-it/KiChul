@@ -8,7 +8,7 @@ exam: MID
 type: 객관식
 source_question_no: 9
 difficulty: '4'
-unit: 공통수학1 > 방정식과 부등식 > 이차방정식
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-1. 복소수와 이차방정식
 source: web_upload_2026-02-28
 tags:
 - 자동입력
@@ -21,11 +21,10 @@ assets:
 - assets/original/
 - assets/original/009.png
 level: 4
-unit_l1: 공통수학1
-unit_l2: 방정식과 부등식
-unit_l3: 이차방정식
+unit_l1: 공통수학1(2022개정)
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-1. 복소수와 이차방정식
 ---
-
 ## Q
 0이 아닌 세 실수 $a, b, c$에 대하여 $\sqrt{a}\sqrt{b} = -\sqrt{ab}$, $\frac{\sqrt{c}}{\sqrt{a}} = -\sqrt{\frac{c}{a}}$일 때, 항상 서로 다른 두 실근을 갖는 이차방정식을 고르면?
 

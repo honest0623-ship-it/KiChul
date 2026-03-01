@@ -11,10 +11,10 @@ source_question_kind: objective
 source_question_label: '11'
 difficulty: '3'
 level: 3
-unit: 공통수학1 > 방정식과 부등식 > 복소수
-unit_l1: 공통수학1
-unit_l2: 방정식과 부등식
-unit_l3: 복소수
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-1. 복소수와 이차방정식
+unit_l1: 공통수학1(2022개정)
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-1. 복소수와 이차방정식
 source: user_upload_2026-02-27
 tags:
 - 객관식
@@ -23,7 +23,6 @@ assets:
 - assets/original/
 - assets/original/011.png
 ---
-
 ## Q
 $0$이 아닌 두 실수 $a,b$가 다음을 만족시킬 때, $a+b$의 값은? (단, $i=\sqrt{-1}$)
 

@@ -142,6 +142,17 @@
       page-break-inside: avoid;
     }
 
+    .teacher-answer {
+      margin-top: 1.2mm;
+      color: #0f172a;
+      font-size: calc({{ font_size_pt }}pt - 0.2pt);
+      font-weight: 700;
+    }
+
+    .teacher-answer p {
+      margin: 0;
+    }
+
     .problem-pool {
       position: absolute;
       visibility: hidden;
@@ -169,6 +180,9 @@
         <div class="question">{{ problem.question_html }}</div>
         {% if problem.choices_html %}
           <div class="choices">{{ problem.choices_html }}</div>
+        {% endif %}
+        {% if show_teacher_answer and problem.teacher_answer_html %}
+          <div class="teacher-answer">{{ problem.teacher_answer_html }}</div>
         {% endif %}
       </section>
     {% endfor %}

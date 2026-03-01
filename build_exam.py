@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+import tempfile
 from typing import List
 
 from parser import ParsedProblem, parse_problem_file
@@ -70,6 +71,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Optional solution sheet PDF output path (answer + solution).",
     )
     parser.add_argument(
+        "--append-sheets-to-out",
+        action="store_true",
+        help="Append answer/solution sheets to the main exam PDF output as a single file.",
+    )
+    parser.add_argument(
         "--template",
         default="templates/exam.html",
         help="HTML template path. Default: templates/exam.html",
@@ -112,7 +118,43 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show per-problem source info line (school/year/grade/semester/exam/source-no/ID).",
     )
+    parser.add_argument(
+        "--teacher-view",
+        action="store_true",
+        help="Show inline answer under each problem in exam PDF (교사용 출력).",
+    )
     return parser
+
+
+def _merge_pdfs(out_pdf: Path, append_paths: List[Path]) -> None:
+    try:
+        from pypdf import PdfReader, PdfWriter
+    except ImportError as exc:  # pragma: no cover - runtime dependency
+        raise RuntimeError(
+            "pypdf is required to append answer/solution sheets into the main output PDF."
+        ) from exc
+
+    writer = PdfWriter()
+    for source in [out_pdf, *append_paths]:
+        reader = PdfReader(str(source))
+        for page in reader.pages:
+            writer.add_page(page)
+
+    temp_file = tempfile.NamedTemporaryFile(
+        suffix=".pdf",
+        prefix=f"{out_pdf.stem}_merged_",
+        dir=str(out_pdf.parent),
+        delete=False,
+    )
+    temp_path = Path(temp_file.name)
+    temp_file.close()
+    try:
+        with temp_path.open("wb") as handle:
+            writer.write(handle)
+        temp_path.replace(out_pdf)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
 
 
 def _build_layout(
@@ -122,6 +164,7 @@ def _build_layout(
     title: str,
     show_meta: bool,
     show_source_info: bool,
+    show_teacher_answer: bool,
 ) -> ExamLayout:
     paper_key = paper.upper()
     if columns < 1:
@@ -153,6 +196,7 @@ def _build_layout(
         title=title,
         show_meta=show_meta,
         show_source_info=show_source_info,
+        show_teacher_answer=show_teacher_answer,
     )
 
 
@@ -174,6 +218,7 @@ def main() -> int:
             title=args.title,
             show_meta=args.show_meta,
             show_source_info=args.show_source_info,
+            show_teacher_answer=args.teacher_view,
         )
     except ValueError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
@@ -233,35 +278,79 @@ def main() -> int:
 
     print(f"Exam PDF: {out_pdf.resolve()}")
 
+    appended_paths: List[Path] = []
+    temp_sheet_paths: List[Path] = []
+
+    def _temp_sheet_path(prefix: str) -> Path:
+        tmp = tempfile.NamedTemporaryFile(
+            suffix=".pdf",
+            prefix=f"{out_pdf.stem}_{prefix}_",
+            dir=str(out_pdf.parent),
+            delete=False,
+        )
+        path = Path(tmp.name)
+        tmp.close()
+        temp_sheet_paths.append(path)
+        return path
+
     if answer_sheet_path:
+        answer_target = _temp_sheet_path("answer") if args.append_sheets_to_out else answer_sheet_path
         try:
             render_answer_sheet_pdf(
                 problems=parsed,
-                out_pdf=answer_sheet_path,
+                out_pdf=answer_target,
                 mathjax_bundle=mathjax_bundle,
                 warnings=warnings,
             )
-            print(f"Answer Sheet PDF: {answer_sheet_path.resolve()}")
+            if args.append_sheets_to_out:
+                appended_paths.append(answer_target)
+                print("Answer sheet generated (append target).")
+            else:
+                print(f"Answer Sheet PDF: {answer_sheet_path.resolve()}")
         except Exception as exc:  # pylint: disable=broad-except
             print(f"[ERROR] Failed to render answer sheet PDF: {exc}", file=sys.stderr)
             for warning in warnings:
                 print(f"[WARN] {warning}", file=sys.stderr)
+            for temp_path in temp_sheet_paths:
+                temp_path.unlink(missing_ok=True)
             return 1
 
     if solution_sheet_path:
+        solution_target = _temp_sheet_path("solution") if args.append_sheets_to_out else solution_sheet_path
         try:
             render_solution_sheet_pdf(
                 problems=parsed,
-                out_pdf=solution_sheet_path,
+                out_pdf=solution_target,
                 mathjax_bundle=mathjax_bundle,
                 warnings=warnings,
             )
-            print(f"Solution Sheet PDF: {solution_sheet_path.resolve()}")
+            if args.append_sheets_to_out:
+                appended_paths.append(solution_target)
+                print("Solution sheet generated (append target).")
+            else:
+                print(f"Solution Sheet PDF: {solution_sheet_path.resolve()}")
         except Exception as exc:  # pylint: disable=broad-except
             print(f"[ERROR] Failed to render solution sheet PDF: {exc}", file=sys.stderr)
             for warning in warnings:
                 print(f"[WARN] {warning}", file=sys.stderr)
+            for temp_path in temp_sheet_paths:
+                temp_path.unlink(missing_ok=True)
             return 1
+
+    if args.append_sheets_to_out and appended_paths:
+        try:
+            _merge_pdfs(out_pdf=out_pdf, append_paths=appended_paths)
+            print(f"Merged PDF (exam + selected sheets): {out_pdf.resolve()}")
+        except Exception as exc:  # pylint: disable=broad-except
+            print(f"[ERROR] Failed to merge PDFs: {exc}", file=sys.stderr)
+            for warning in warnings:
+                print(f"[WARN] {warning}", file=sys.stderr)
+            for temp_path in temp_sheet_paths:
+                temp_path.unlink(missing_ok=True)
+            return 1
+
+    for temp_path in temp_sheet_paths:
+        temp_path.unlink(missing_ok=True)
 
     for warning in warnings:
         print(f"[WARN] {warning}", file=sys.stderr)

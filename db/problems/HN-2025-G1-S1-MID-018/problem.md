@@ -7,7 +7,7 @@ semester: 1
 exam: MID
 type: 객관식
 difficulty: '4'
-unit: 공통수학1 > 방정식과 부등식 > 이차방정식과 이차함수
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-2. 이차방정식과 이차함수
 source: ''
 tags:
 - 이차함수
@@ -17,11 +17,10 @@ tags:
 assets:
 - assets/scan.png
 level: 4
-unit_l1: 공통수학1
-unit_l2: 방정식과 부등식
-unit_l3: 이차방정식과 이차함수
+unit_l1: 공통수학1(2022개정)
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-2. 이차방정식과 이차함수
 ---
-
 ## Q
 오른쪽 그림의 직사각형 $ABCD$에서 두 점 $A$와 $B$는 $x$축 위에 있고,
 두 점 $C$와 $D$는 이차함수

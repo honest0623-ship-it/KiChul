@@ -1,4 +1,4 @@
-﻿---
+---
 id: JE-2025-G1-S1-MID-015
 school: JE
 year: 2025
@@ -11,10 +11,10 @@ source_question_kind: objective
 source_question_label: '15'
 difficulty: '3'
 level: 3
-unit: 공통수학1 > 다항식 > 나머지정리/인수정리
-unit_l1: 공통수학1
-unit_l2: 다항식
-unit_l3: 나머지정리/인수정리
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-2. 이차방정식과 이차함수
+unit_l1: 공통수학1(2022개정)
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-2. 이차방정식과 이차함수
 source: user_upload_2026-02-27
 tags:
 - 객관식
@@ -23,7 +23,6 @@ assets:
 - assets/original/
 - assets/original/15번.png
 ---
-
 ## Q
 직선 $y=mx+9$가 두 이차함수
 $$

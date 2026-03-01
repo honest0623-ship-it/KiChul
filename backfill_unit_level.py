@@ -8,6 +8,7 @@ import yaml
 
 from parser import parse_problem_file
 from unit_level_classifier import classify_unit_and_level
+from unit_taxonomy import normalize_unit_triplet
 
 
 def _collect_problem_files(root: Path, pattern: str | None) -> List[Path]:
@@ -19,13 +20,19 @@ def _collect_problem_files(root: Path, pattern: str | None) -> List[Path]:
 
 
 def _build_front_matter(front: Dict[str, object], classified) -> Dict[str, object]:
+    unit_l1, unit_l2, unit_l3 = normalize_unit_triplet(
+        classified.unit_l1,
+        classified.unit_l2,
+        classified.unit_l3,
+        grade=int(str(front.get("grade", "0") or "0") or 0) or None,
+    )
     updated = dict(front)
     updated["difficulty"] = str(classified.level)
     updated["level"] = int(classified.level)
-    updated["unit"] = classified.unit_path
-    updated["unit_l1"] = classified.unit_l1
-    updated["unit_l2"] = classified.unit_l2
-    updated["unit_l3"] = classified.unit_l3
+    updated["unit"] = ">".join([unit_l1, unit_l2, unit_l3])
+    updated["unit_l1"] = unit_l1
+    updated["unit_l2"] = unit_l2
+    updated["unit_l3"] = unit_l3
     return updated
 
 
@@ -107,4 +114,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

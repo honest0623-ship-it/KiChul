@@ -8,7 +8,7 @@ exam: MID
 type: 서술형
 source_question_no: 6
 difficulty: '5'
-unit: 공통수학1 > 방정식과 부등식 > 이차방정식과 이차함수
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-2. 이차방정식과 이차함수
 source: web_upload_2026-02-28
 tags:
 - 자동입력
@@ -21,11 +21,10 @@ assets:
 - assets/original/
 - assets/original/서답6번.png
 level: 5
-unit_l1: 공통수학1
-unit_l2: 방정식과 부등식
-unit_l3: 이차방정식과 이차함수
+unit_l1: 공통수학1(2022개정)
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-2. 이차방정식과 이차함수
 ---
-
 ## Q
 $-3 \le x \le 3$ 일 때, 이차함수 $f(x)=(2-x)(4+x)+k$ 의 최댓값이 8이다. 이때, $k$의 값을 구하고, 이 함수의 최솟값을 구하시오. (단, $k$는 실수)
 

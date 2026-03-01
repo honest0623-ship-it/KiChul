@@ -36,6 +36,7 @@ class ExamLayout:
     title: str
     show_meta: bool
     show_source_info: bool
+    show_teacher_answer: bool
 
 
 PROBLEM_ID_RE = re.compile(
@@ -134,59 +135,80 @@ SOLUTION_SHEET_TEMPLATE = """
   <meta charset="utf-8" />
   <title>Solution Sheet</title>
   <style>
-    @page { size: A4; margin: 14mm 12mm 14mm 12mm; }
+    @page { size: A4; margin: 10mm 9mm 10mm 9mm; }
     body {
       font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-      font-size: 11pt;
-      line-height: 1.6;
+      font-size: 10.2pt;
+      line-height: 1.3;
       color: #111;
       margin: 0;
     }
     h1 {
-      font-size: 17pt;
-      margin: 0 0 6mm 0;
+      font-size: 15pt;
+      margin: 0 0 3mm 0;
+    }
+    .sheet {
+      column-count: 2;
+      column-gap: 4mm;
+      column-fill: auto;
     }
     .item {
       border: 0.8pt solid #cfd6dd;
-      border-radius: 6px;
-      padding: 2.4mm 3mm;
-      margin: 0 0 1em 0;
-      break-inside: auto;
-      page-break-inside: auto;
+      border-radius: 4px;
+      padding: 1.4mm 1.8mm;
+      margin: 0 0 1.6mm 0;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      -webkit-column-break-inside: avoid;
     }
     .head {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      margin: 0 0 2mm 0;
-      border-bottom: 0.6pt solid #e5e7eb;
-      padding-bottom: 1.2mm;
+      margin: 0 0 0.9mm 0;
+      border-bottom: 0.5pt solid #e5e7eb;
+      padding-bottom: 0.7mm;
     }
     .num {
       font-weight: 700;
-      font-size: 11.5pt;
+      font-size: 10.4pt;
     }
     .pid {
       color: #667085;
-      font-size: 9pt;
+      font-size: 8.2pt;
     }
     .label {
-      font-size: 9.8pt;
+      font-size: 8.8pt;
       color: #475467;
-      margin: 0 0 1mm 0;
+      margin: 0 0 0.4mm 0;
       font-weight: 700;
     }
     .answer,
     .solution {
-      margin-bottom: 1.5mm;
+      margin-bottom: 0.7mm;
     }
     .answer p,
     .solution p {
-      margin: 0 0 1mm 0;
+      margin: 0;
+      line-height: 1.26;
     }
-    .answer p:last-child,
-    .solution p:last-child {
-      margin-bottom: 0;
+    .answer p + p,
+    .solution p + p {
+      margin-top: 0.25mm;
+    }
+    .answer .MathJax_Display,
+    .solution .MathJax_Display,
+    .answer mjx-container[display="true"],
+    .solution mjx-container[display="true"] {
+      margin-top: 0.35mm !important;
+      margin-bottom: 0.35mm !important;
+    }
+    .answer img,
+    .solution img {
+      max-width: 78%;
+      height: auto;
+      display: block;
+      margin: 0.5mm auto;
     }
   </style>
   {{ mathjax_bootstrap | safe }}
@@ -194,22 +216,24 @@ SOLUTION_SHEET_TEMPLATE = """
 </head>
 <body>
   <h1>Solution Sheet</h1>
-  {% for row in rows %}
-    <section class="item">
-      <div class="head">
-        <span class="num">{{ row.number }}\ubc88</span>
-        <span class="pid">{{ row.problem_id }}</span>
-      </div>
-      <div class="answer">
-        <p class="label">\uc815\ub2f5</p>
-        {{ row.answer_html }}
-      </div>
-      <div class="solution">
-        <p class="label">\ud574\uc124</p>
-        {{ row.solution_html }}
-      </div>
-    </section>
-  {% endfor %}
+  <main class="sheet">
+    {% for row in rows %}
+      <section class="item">
+        <div class="head">
+          <span class="num">{{ row.number }}\ubc88</span>
+          <span class="pid">{{ row.problem_id }}</span>
+        </div>
+        <div class="answer">
+          <p class="label">\uc815\ub2f5</p>
+          {{ row.answer_html }}
+        </div>
+        <div class="solution">
+          <p class="label">\ud574\uc124</p>
+          {{ row.solution_html }}
+        </div>
+      </section>
+    {% endfor %}
+  </main>
 </body>
 </html>
 """
@@ -324,6 +348,19 @@ def _build_source_info(problem: ParsedProblem) -> str:
     exam = str(front.get("exam") or from_id.get("exam") or "").strip().upper()
     source_label = _extract_source_question_label(front, str(from_id.get("number", "")))
 
+    unit_l1 = str(front.get("unit_l1") or "").strip()
+    unit_l2 = str(front.get("unit_l2") or "").strip()
+    unit_l3 = str(front.get("unit_l3") or "").strip()
+    unit_path = ""
+    if unit_l1 and unit_l2 and unit_l3:
+        unit_path = ">".join([unit_l1, unit_l2, unit_l3])
+    else:
+        raw_unit = str(front.get("unit") or "").strip()
+        if raw_unit:
+            unit_parts = [token.strip() for token in raw_unit.split(">") if token.strip()]
+            if unit_parts:
+                unit_path = ">".join(unit_parts)
+
     parts: List[str] = []
     if school:
         parts.append(school)
@@ -337,6 +374,8 @@ def _build_source_info(problem: ParsedProblem) -> str:
         parts.append(exam)
     if source_label:
         parts.append(f"출제번호 {source_label}")
+    if unit_path:
+        parts.append(f"단원 {unit_path}")
     return " | ".join(parts)
 
 
@@ -383,7 +422,7 @@ def _build_exam_summary(problems: Sequence[ParsedProblem]) -> Dict[str, str]:
 
 
 def _problem_to_template_context(
-    problem: ParsedProblem, number: int, warnings: List[str]
+    problem: ParsedProblem, number: int, warnings: List[str], show_teacher_answer: bool
 ) -> Dict[str, object]:
     base_dir = problem.source_path.parent
     q_html = _rewrite_img_sources(
@@ -392,6 +431,16 @@ def _problem_to_template_context(
     choices_html = _rewrite_img_sources(
         _markdown_to_html(problem.choices), base_dir, problem.display_id, warnings
     )
+    teacher_answer_html = ""
+    if show_teacher_answer:
+        answer_md = (problem.answer or "").strip()
+        if not answer_md:
+            answer_md = "(정답 누락)"
+            warnings.append(f"{problem.display_id}: Answer section is empty.")
+        teacher_answer_md = f"**정답 : {answer_md}**"
+        teacher_answer_html = _rewrite_img_sources(
+            _markdown_to_html(teacher_answer_md), base_dir, problem.display_id, warnings
+        )
 
     return {
         "number": number,
@@ -399,6 +448,7 @@ def _problem_to_template_context(
         "source_info": _build_source_info(problem),
         "question_html": Markup(q_html),
         "choices_html": Markup(choices_html),
+        "teacher_answer_html": Markup(teacher_answer_html),
     }
 
 
@@ -494,7 +544,12 @@ def render_exam_pdf(
     template = env.get_template(template_path.name)
 
     items = [
-        _problem_to_template_context(problem, idx, warnings)
+        _problem_to_template_context(
+            problem,
+            idx,
+            warnings,
+            show_teacher_answer=layout.show_teacher_answer,
+        )
         for idx, problem in enumerate(problems, start=1)
     ]
     problem_pages = _chunk_problem_pages(items, page_size=4)
@@ -507,6 +562,7 @@ def render_exam_pdf(
         title=layout.title,
         show_meta=layout.show_meta,
         show_source_info=layout.show_source_info,
+        show_teacher_answer=layout.show_teacher_answer,
         paper=layout.paper,
         page_width_mm=layout.page_width_mm,
         page_height_mm=layout.page_height_mm,

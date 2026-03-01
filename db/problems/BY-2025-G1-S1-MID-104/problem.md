@@ -11,10 +11,10 @@ source_question_kind: subjective
 source_question_label: 서답4
 difficulty: '4'
 level: 4
-unit: 공통수학1 > 방정식과 부등식 > 이차방정식과 이차함수
-unit_l1: 공통수학1
-unit_l2: 방정식과 부등식
-unit_l3: 이차방정식과 이차함수
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-2. 이차방정식과 이차함수
+unit_l1: 공통수학1(2022개정)
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-2. 이차방정식과 이차함수
 source: user_upload_2026-02-27
 tags:
 - 서답형-서술형
@@ -23,7 +23,6 @@ assets:
 - assets/original/
 - assets/original/서답4번.png
 ---
-
 ## Q
 $$
 f(x)=x^2-4mx+5m^2+6m+1
