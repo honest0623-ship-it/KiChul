@@ -41,16 +41,13 @@ $$
 ②
 
 ## Solution
-$$
-A=\frac{(A+B)+(A-B)}{2}=\begin{pmatrix}1 & 0 \\ 3 & 2\end{pmatrix},\qquad
-B=\frac{(A+B)-(A-B)}{2}=\begin{pmatrix}1 & 1 \\ 1 & 1\end{pmatrix}.
-$$
+$$A=\frac{(A+B)+(A-B)}{2}$$
+$$=\begin{pmatrix}1 & 0 \\ 3 & 2\end{pmatrix}$$
+$$B=\frac{(A+B)-(A-B)}{2}$$
+$$=\begin{pmatrix}1 & 1 \\ 1 & 1\end{pmatrix}$$
+
 따라서
-$$
-AB=\begin{pmatrix}1 & 1 \\ 5 & 5\end{pmatrix},\quad
-BA=\begin{pmatrix}4 & 2 \\ 4 & 2\end{pmatrix},
-$$
-$$
-AB-BA=\begin{pmatrix}-3 & -1 \\ 1 & 3\end{pmatrix}.
-$$
+$$AB=\begin{pmatrix}1 & 1 \\ 5 & 5\end{pmatrix}, \quad BA=\begin{pmatrix}4 & 2 \\ 4 & 2\end{pmatrix}$$
+$$AB-BA=\begin{pmatrix}-3 & -1 \\ 1 & 3\end{pmatrix}$$
+
 $(1,2)$ 성분은 $-1$이다.

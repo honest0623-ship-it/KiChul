@@ -64,6 +64,8 @@ SUBJECTIVE_LABEL_LINE_RE = re.compile(
 QUESTION_SECTION_SKIP_LINE_RE = re.compile(r"^\s*(?:정답|해설|풀이)\s*[:：]?", re.IGNORECASE)
 CHOICE_TOKEN_RE = re.compile(r"(①|②|③|④|⑤|⑴|⑵|⑶|⑷|⑸|\([1-5]\)|（[1-5]）|[1-5][\.\)])")
 CHOICE_MARKERS = ["①", "②", "③", "④", "⑤"]
+SCAN_SUFFIX_RE = re.compile(r"(?:[_\-\s]?scan)$", re.IGNORECASE)
+UNIT_HINT_INDEX_PREFIX_RE = re.compile(r"^\d+\s*-\s*\d+\s*\.\s*")
 RAPID_OCR_ENGINE: Any = None
 
 
@@ -137,6 +139,17 @@ class IngestResult:
 CompanionKind = Literal["answer", "solution"]
 
 
+def _is_scan_companion(stem: str) -> bool:
+    token = (stem or "").strip()
+    return bool(token and SCAN_SUFFIX_RE.search(token))
+
+
+def _strip_scan_suffix(stem: str) -> str:
+    token = (stem or "").strip()
+    stripped = SCAN_SUFFIX_RE.sub("", token)
+    return stripped.strip("_- ").strip()
+
+
 def _companion_kind(stem: str) -> Optional[CompanionKind]:
     compact = re.sub(r"\s+", "", stem).lower()
     if SOLUTION_HINT_RE.search(compact):
@@ -166,6 +179,13 @@ def _natural_sort_key(name: str) -> List[Any]:
     return [int(token) if token.isdigit() else token.lower() for token in re.split(r"(\d+)", name)]
 
 
+def _normalize_unit_hint_token(text: str) -> str:
+    token = (text or "").strip()
+    token = UNIT_HINT_INDEX_PREFIX_RE.sub("", token)
+    token = re.sub(r"\s+", "", token)
+    return token
+
+
 # File-name unit hint mapping.
 # Expected names: "012_나머지정리.png", "서답3번_이차방정식과 이차함수.png", etc.
 FILENAME_UNIT_HINT_MAP: Dict[str, Tuple[str, str, str]] = {
@@ -179,11 +199,23 @@ FILENAME_UNIT_HINT_MAP: Dict[str, Tuple[str, str, str]] = {
     "합의 법칙과 곱의 법칙": ("공통수학1(2022개정)", "3. 경우의 수", "3-1. 합의 법칙과 곱의 법칙"),
     "순열과 조합": ("공통수학1(2022개정)", "3. 경우의 수", "3-2. 순열과 조합"),
     "행렬과 그 연산": ("공통수학1(2022개정)", "4. 행렬", "4-1. 행렬과 그 연산"),
+    "지수와 로그": ("대수(2022개정)", "1. 지수함수와 로그함수", "1-1. 지수와 로그"),
+    "지수함수": ("대수(2022개정)", "1. 지수함수와 로그함수", "1-2. 지수함수"),
+    "로그함수": ("대수(2022개정)", "1. 지수함수와 로그함수", "1-3. 로그함수"),
+    "삼각함수": ("대수(2022개정)", "2. 삼각함수", "2-1. 삼각함수"),
+    "삼각함수의 그래프": ("대수(2022개정)", "2. 삼각함수", "2-2. 삼각함수의 그래프"),
+    "삼각함수의 활용": ("대수(2022개정)", "2. 삼각함수", "2-3. 삼각함수의 활용"),
+    "등차수열": ("대수(2022개정)", "3. 수열", "3-1. 등차수열"),
+    "등비수열": ("대수(2022개정)", "3. 수열", "3-2. 등비수열"),
+    "수열의 합": ("대수(2022개정)", "3. 수열", "3-3. 수열의 합"),
+    "수학적귀납법": ("대수(2022개정)", "3. 수열", "3-4. 수학적귀납법"),
 }
 
 
 def _extract_unit_hint_from_filename(filename: str) -> str:
     stem = Path(filename).stem.strip()
+    if _is_scan_companion(stem):
+        stem = _strip_scan_suffix(stem)
     if "_" not in stem:
         return ""
     # Use first underscore as separator: "<번호>_<소단원>".
@@ -202,10 +234,10 @@ def _unit_triplet_from_filename_hint(filename: str) -> Optional[Tuple[str, str, 
     if matched:
         return matched
 
-    # Compact fallback.
-    compact = re.sub(r"\s+", "", hint)
+    # Compact fallback with index-prefix normalization.
+    compact = _normalize_unit_hint_token(hint)
     for key, value in FILENAME_UNIT_HINT_MAP.items():
-        if re.sub(r"\s+", "", key) == compact:
+        if _normalize_unit_hint_token(key) == compact:
             return value
     return None
 
@@ -225,6 +257,16 @@ def list_original_images(original_dir: Path) -> List[Path]:
 
 def detect_candidate(path: Path, subjective_offset: int = 100) -> ImageCandidate:
     stem = path.stem.strip()
+
+    if _is_scan_companion(stem):
+        return ImageCandidate(
+            filename=path.name,
+            path=path,
+            source_question_no=None,
+            detected_problem_no=None,
+            qtype="",
+            detection_note="companion file (_scan), not a question image",
+        )
 
     if _companion_kind(stem) is not None:
         return ImageCandidate(
@@ -564,6 +606,44 @@ def _companion_indexes(
     return answer_index, solution_index
 
 
+def _scan_companion_index(original_dir: Path, subjective_offset: int) -> Dict[int, Path]:
+    index: Dict[int, Path] = {}
+    for item in list_original_images(original_dir):
+        if not _is_scan_companion(item.stem):
+            continue
+        base_stem = _strip_scan_suffix(item.stem)
+        problem_no = _extract_problem_no_from_name(base_stem, subjective_offset=subjective_offset)
+        if problem_no is None:
+            continue
+        index.setdefault(problem_no, item)
+    return index
+
+
+def _write_scan_png(scan_source: Path, scan_target: Path) -> Optional[str]:
+    if scan_source.suffix.lower() == ".png":
+        shutil.copy2(scan_source, scan_target)
+        return None
+
+    if Image is None:
+        shutil.copy2(scan_source, scan_target)
+        return (
+            "Pillow가 없어 스캔 삽화를 PNG로 변환하지 못했습니다. "
+            "원본 바이트를 scan.png로 복사했습니다."
+        )
+
+    try:
+        with Image.open(scan_source) as raw_img:
+            converted = raw_img.convert("RGBA")
+            converted.save(scan_target, format="PNG")
+        return None
+    except Exception as exc:  # pylint: disable=broad-except
+        shutil.copy2(scan_source, scan_target)
+        return (
+            "scan 이미지 PNG 변환에 실패했습니다 "
+            f"({exc}). 원본 바이트를 scan.png로 복사했습니다."
+        )
+
+
 def _resolve_unique_path(path: Path) -> Path:
     if not path.exists():
         return path
@@ -630,6 +710,7 @@ def _build_problem_markdown(
     unit_l3: str,
     level: int,
     used_ai_generation: bool,
+    has_scan_asset: bool,
 ) -> str:
     source_kind = "objective"
     source_no_text = str(source_question_no) if source_question_no is not None else ""
@@ -666,10 +747,21 @@ def _build_problem_markdown(
         q_lines.append("")
         q_lines.append(f"![원본 이미지](assets/original/{original_asset_filename})")
 
+    if has_scan_asset:
+        q_lines.append("")
+        q_lines.append('<img src="assets/scan.png" style="width: 100%; max-width: 100%;">')
+
     used_ai = used_ai_generation
     tags = _tags(source_no=source_question_no, qtype=qtype, used_ocr=used_ocr, used_ai=used_ai)
     tags_block = _yaml_tags_block(tags)
     choices_body = choices_markdown.strip() or _choices_template(qtype)
+    asset_lines: List[str] = []
+    if has_scan_asset:
+        asset_lines.append("  - assets/scan.png")
+    asset_lines.append("  # Raw source image archive.")
+    asset_lines.append("  - assets/original/")
+    asset_lines.append(f"  - assets/original/{original_asset_filename}")
+    assets_block = "\n".join(asset_lines)
 
     return f"""---
 id: {problem_id}
@@ -692,9 +784,7 @@ source: "{source_record_label}"
 tags:
 {tags_block}
 assets:
-  # Raw source image archive.
-  - assets/original/
-  - assets/original/{original_asset_filename}
+{assets_block}
 ---
 
 ## Q
@@ -737,6 +827,9 @@ def ingest_images(
         candidates = [item for item in all_candidates if item.filename in selected]
 
     answer_index, solution_index = _companion_indexes(
+        original_dir=original_dir, subjective_offset=config.subjective_offset
+    )
+    scan_index = _scan_companion_index(
         original_dir=original_dir, subjective_offset=config.subjective_offset
     )
 
@@ -847,17 +940,31 @@ def ingest_images(
         shutil.copy2(source_file, dest_file)
 
         if config.copy_to_scan_png:
-            shutil.copy2(dest_file, assets / "scan.png")
+            warnings.append(
+                f"{problem_id}: copy_to_scan_png 옵션은 비활성화되었습니다. "
+                "원본 문제 이미지는 scan.png로 복사하지 않습니다. "
+                "삽화는 *_scan 파일을 사용하세요."
+            )
 
         extracted_text = ""
         ocr_warning: Optional[str] = None
         choices_markdown = ""
         answer_text = ""
         solution_text = ""
+        has_scan_asset = False
         effective_qtype = item.qtype
         ai_result: Optional[Any] = None
         ai_error: Optional[str] = None
         used_ocr_flow = False
+
+        scan_source = scan_index.get(problem_no)
+        if scan_source is not None:
+            copied_scan = _resolve_unique_path(original_assets / scan_source.name)
+            shutil.copy2(scan_source, copied_scan)
+            scan_warning = _write_scan_png(copied_scan, assets / "scan.png")
+            has_scan_asset = (assets / "scan.png").exists()
+            if scan_warning:
+                warnings.append(f"{problem_id}: {scan_warning}")
 
         if config.use_ai_solver:
             if ai_auth_failed:
@@ -1059,6 +1166,7 @@ def ingest_images(
                 unit_l3=unit_l3,
                 level=classification.level,
                 used_ai_generation=(ai_result is not None),
+                has_scan_asset=has_scan_asset,
             )
             problem_md_path.write_text(content, encoding="utf-8")
             status = "updated" if existed_before else "created"

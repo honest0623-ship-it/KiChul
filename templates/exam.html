@@ -303,17 +303,24 @@
         const root = document.getElementById("layout-root");
         const pool = document.getElementById("problem-pool");
         if (!root || !pool) return;
+        
+        // Ensure pool is rendered for measurement
+        pool.style.display = "block";
 
         const cards = Array.from(pool.querySelectorAll(".problem-card"));
         if (!cards.length) {
           root.innerHTML = "";
+          pool.style.display = "none";
           return;
         }
 
         const pxPerMm = mmToPx(1);
         const pageBodyHeightPx = (pageHeightMm - marginMm * 2) * pxPerMm;
         const pageWidthPx = root.getBoundingClientRect().width;
-        if (pageWidthPx <= 0) return;
+        if (pageWidthPx <= 0) {
+          pool.style.display = "none";
+          return;
+        }
 
         const colGapPx = columnGapMm * pxPerMm;
         const columnWidthPx = (pageWidthPx - colGapPx) / 2;
@@ -328,6 +335,9 @@
 
         const pages = buildPages(measured, boxHeightPx);
         renderPages(root, pages, pageBodyHeightPx, boxHeightPx);
+        
+        // Hide pool completely so it doesn't take up any layout space or trigger empty pages
+        pool.style.display = "none";
       }
 
       window.__layoutProblemPages = layoutProblemPages;

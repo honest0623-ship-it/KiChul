@@ -27,7 +27,7 @@ assets:
 ## Q
 아래 그림과 같이 $x$축 위의 두 점 $A,B$와 이차함수 $y=-x^2+6x$의 그래프 위의 두 점 $C,D$를 네 꼭짓점으로 하는 직사각형 $ABCD$의 둘레의 길이의 최댓값은?
 
-<img src="assets/scan.png" alt="도형" style="width:34.5%; height:auto;" />
+<img src="assets/scan.png" alt="도형" style="width:43%; max-width:43%; height:auto;" />
 
 ## Choices
 ① $8$  

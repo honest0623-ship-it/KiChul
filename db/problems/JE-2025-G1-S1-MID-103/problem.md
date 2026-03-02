@@ -39,7 +39,7 @@ assets:
 ## Solution
 조건 (가)에서
 $$
-f(x)=n(x-a)(x-a-4)\quad(n\in\mathbb{Z}).
+f(x)=n(x-a)(x-a-4)\quad(n\text{은 정수}).
 $$
 
 꼭짓점의 $x$좌표는 $x=a+2$이고, 구간 $[a-1,\ a+3]$ 안에 있다.

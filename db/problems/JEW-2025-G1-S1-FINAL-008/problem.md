@@ -41,12 +41,12 @@ assets:
 
 1) 홀수 $1$개, 짝수 $3$개:
 $$
-\binom{5}{1}\times\binom{4}{3}=5\times4=20
+{}_{5}\mathrm{C}_{1}\times{}_{4}\mathrm{C}_{3}=5\times4=20
 $$
 
 2) 홀수 $3$개, 짝수 $1$개:
 $$
-\binom{5}{3}\times\binom{4}{1}=10\times4=40
+{}_{5}\mathrm{C}_{3}\times{}_{4}\mathrm{C}_{1}=10\times4=40
 $$
 
 따라서 경우의 수는

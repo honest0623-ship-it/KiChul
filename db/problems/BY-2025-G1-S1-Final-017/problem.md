@@ -29,7 +29,7 @@ assets:
 각각의 부부는 이웃해 앉고, 두 쌍의 부부는 같은 열에 앉는다.
 부부에 속한 남자를 제외한 남자 3명은 서로 이웃하지 않도록 앉는 방법의 수는?
 
-<img src="assets/scan.png" alt="seat-figure" style="width:56% !important; max-width:56% !important; height:auto;" />
+<img src="assets/scan.png" alt="seat-figure" style="width:70% !important; max-width:70% !important; height:auto;" />
 ## Choices
 ① $1968$
 ② $2016$

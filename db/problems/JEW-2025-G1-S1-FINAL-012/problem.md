@@ -27,7 +27,7 @@ assets:
 ## Q
 다음 아래 그림과 같이 1학년 3명과 2학년 3명이 자리에 앉아 공부를 하려고 한다.
 
-<img src="assets/scan.png" alt="figure" style="width:39% !important; max-width:39% !important; height:auto;" />
+<img src="assets/scan.png" alt="figure" style="width:49% !important; max-width:49% !important; height:auto;" />
 1학년 1명과 2학년 1명이 짝을 지어 2명씩 같이 앉을 때, 6명이 모두 자리에 앉는 경우의 수를 구하여라. (단, 남은 자리는 비워 둔다.)
 
 ## Choices

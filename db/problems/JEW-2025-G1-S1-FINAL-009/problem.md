@@ -27,7 +27,7 @@ assets:
 ## Q
 다음 그림은 두 지점 $A_1$, $A_2$를 연결하는 일방통행로를 화살표로 나타낸 것이다.
 
-<img src="assets/scan.png" alt="figure" style="width:39% !important; max-width:39% !important; height:auto;" />
+<img src="assets/scan.png" alt="figure" style="width:49% !important; max-width:49% !important; height:auto;" />
 이때 $2\times2$행렬 $A$의 $(i,j)$성분 $a_{ij}$를
 $$
 a_{ij}=\text{(}A_i\text{ 지점에서 }A_j\text{ 지점으로 이동할 수 있는 일방통행로의 개수)}
@@ -39,11 +39,11 @@ $$
 를 만족시키는 행렬 $X$를 구하여라. (단, $E$는 단위행렬, $O$는 영행렬)
 
 ## Choices
-① $\begin{bmatrix}0 & 4 \\ 2 & 2\end{bmatrix}$
-② $\begin{bmatrix}0 & 2 \\ 1 & 1\end{bmatrix}$
-③ $\begin{bmatrix}0 & -2 \\ 1 & 1\end{bmatrix}$
-④ $\begin{bmatrix}0 & -4 \\ -2 & -2\end{bmatrix}$
-⑤ $\begin{bmatrix}0 & -4 \\ 2 & 2\end{bmatrix}$
+① $\begin{pmatrix}0 & 4 \\ 2 & 2\end{pmatrix}$
+② $\begin{pmatrix}0 & 2 \\ 1 & 1\end{pmatrix}$
+③ $\begin{pmatrix}0 & -2 \\ 1 & 1\end{pmatrix}$
+④ $\begin{pmatrix}0 & -4 \\ -2 & -2\end{pmatrix}$
+⑤ $\begin{pmatrix}0 & -4 \\ 2 & 2\end{pmatrix}$
 
 ## Answer
 ①
@@ -51,7 +51,7 @@ $$
 ## Solution
 그림에서 $a_{11}=0$, $a_{12}=2$, $a_{21}=1$, $a_{22}=1$이므로
 $$
-A=\begin{bmatrix}0 & 2 \\ 1 & 1\end{bmatrix}
+A=\begin{pmatrix}0 & 2 \\ 1 & 1\end{pmatrix}
 $$
 이다.
 
@@ -64,6 +64,6 @@ AE-3A+X=O
 $$
 따라서
 $$
-X=\begin{bmatrix}0 & 4 \\ 2 & 2\end{bmatrix}
+X=\begin{pmatrix}0 & 4 \\ 2 & 2\end{pmatrix}
 $$
 이다.

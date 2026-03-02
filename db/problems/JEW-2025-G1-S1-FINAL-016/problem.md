@@ -45,7 +45,7 @@ assets:
 ## Solution
 라운드별 집합을 $S_1,S_2,S_3,S_4$라 두면
 $$
-|S_1|=2,\quad |S_2|=4,\quad |S_3|=2,\quad |S_4|=3
+n(S_1)=2,\quad n(S_2)=4,\quad n(S_3)=2,\quad n(S_4)=3
 $$
 이고,
 $$
@@ -55,14 +55,14 @@ $$
 
 먼저 규칙1을 무시하면
 $$
-\binom{7}{2}\times\binom{5}{4}\times\binom{3}{2}\times\binom{5}{3}=3150
+{}_{7}\mathrm{C}_{2}\times{}_{5}\mathrm{C}_{4}\times{}_{3}\mathrm{C}_{2}\times{}_{5}\mathrm{C}_{3}=3150
 $$
 이다.
 
 이제 한 선수가 한 번도 배정되지 않는 경우를 뺀다.
 특정 선수 1명을 고정하면 경우의 수는
 $$
-\binom{6}{2}\times\binom{4}{4}\times\binom{2}{2}\times\binom{4}{3}=60
+{}_{6}\mathrm{C}_{2}\times{}_{4}\mathrm{C}_{4}\times{}_{2}\mathrm{C}_{2}\times{}_{4}\mathrm{C}_{3}=60
 $$
 이고, 선수는 7명이므로
 $$

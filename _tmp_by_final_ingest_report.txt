@@ -1,0 +1,14 @@
+created=13 updated=0 skipped=0 warnings=0
+006_행렬과 그 연산.png -> BY-2025-G1-S1-Final-006 [created]
+007_여러 가지 부등식.png -> BY-2025-G1-S1-Final-007 [created]
+009_합의 법칙과 곱의 법칙.png -> BY-2025-G1-S1-Final-009 [created]
+010_행렬과 그 연산.png -> BY-2025-G1-S1-Final-010 [created]
+012_여러 가지 부등식.png -> BY-2025-G1-S1-Final-012 [created]
+013_여러 가지 부등식.png -> BY-2025-G1-S1-Final-013 [created]
+014_여러 가지 부등식.png -> BY-2025-G1-S1-Final-014 [created]
+015_여러 가지 방정식.png -> BY-2025-G1-S1-Final-015 [created]
+016_행렬과 그 연산.png -> BY-2025-G1-S1-Final-016 [created]
+017_순열과 조합.png -> BY-2025-G1-S1-Final-017 [created] scan.png
+018_행렬과 그 연산.png -> BY-2025-G1-S1-Final-018 [created]
+서답2번_순열과 조합.png -> BY-2025-G1-S1-Final-102 [created]
+서답4번_여러 가지 부등식.png -> BY-2025-G1-S1-Final-104 [created]
