@@ -28,6 +28,7 @@ MATH_SEGMENT_RE = re.compile(
     r"(\$\$.*?\$\$|\\\[.*?\\\]|\\\(.*?\\\)|\$(?:\\.|[^$\n\\])+\$)",
     re.DOTALL,
 )
+CURRICULUM_SUFFIX_RE = re.compile(r"\s*\(2022개정\)\s*")
 
 
 @dataclass(frozen=True)
@@ -35,7 +36,10 @@ class ExamLayout:
     paper: str
     page_width_mm: int
     page_height_mm: int
-    margin_mm: int
+    margin_top_mm: int
+    margin_right_mm: int
+    margin_bottom_mm: int
+    margin_left_mm: int
     column_gap_mm: int
     columns: int
     font_size_pt: float
@@ -83,8 +87,8 @@ window.addEventListener('load', () => {
 PDF_EMPTY_HEADER_TEMPLATE = "<div></div>"
 
 PDF_FOOTER_TEMPLATE = """
-<div style="width:100%; font-size:10px; color:#5f6b7a; text-align:center;">
-  -<span class="pageNumber"></span>/<span class="totalPages"></span>-
+<div style="width:100%; font-size:9px; color:#222; text-align:center; line-height:1; transform:translateY(-3.8mm);">
+  <span class="pageNumber"></span>/<span class="totalPages"></span>
 </div>
 """
 
@@ -377,12 +381,14 @@ def _build_source_info(problem: ParsedProblem) -> str:
     unit_l3 = str(front.get("unit_l3") or "").strip()
     unit_path = ""
     if unit_l1 and unit_l2 and unit_l3:
-        unit_path = ">".join([unit_l1, unit_l2, unit_l3])
+        unit_path = ">".join([CURRICULUM_SUFFIX_RE.sub("", unit_l1).strip(), unit_l2, unit_l3])
     else:
         raw_unit = str(front.get("unit") or "").strip()
         if raw_unit:
             unit_parts = [token.strip() for token in raw_unit.split(">") if token.strip()]
             if unit_parts:
+                if unit_parts:
+                    unit_parts[0] = CURRICULUM_SUFFIX_RE.sub("", unit_parts[0]).strip()
                 unit_path = ">".join(unit_parts)
 
     parts: List[str] = []
@@ -403,14 +409,62 @@ def _build_source_info(problem: ParsedProblem) -> str:
     return " | ".join(parts)
 
 
+def _extract_unit_path(front_matter: Dict[str, object]) -> str:
+    unit_l1 = str(front_matter.get("unit_l1") or "").strip()
+    unit_l2 = str(front_matter.get("unit_l2") or "").strip()
+    unit_l3 = str(front_matter.get("unit_l3") or "").strip()
+    if unit_l1 and unit_l2 and unit_l3:
+        return " > ".join([CURRICULUM_SUFFIX_RE.sub("", unit_l1).strip(), unit_l2, unit_l3])
+
+    raw_unit = str(front_matter.get("unit") or "").strip()
+    if not raw_unit:
+        return ""
+    unit_parts = [token.strip() for token in raw_unit.split(">") if token.strip()]
+    if unit_parts:
+        unit_parts[0] = CURRICULUM_SUFFIX_RE.sub("", unit_parts[0]).strip()
+    return " > ".join(unit_parts)
+
+
+def _build_source_header_meta(problem: ParsedProblem) -> Dict[str, str]:
+    front = problem.front_matter
+    matched = PROBLEM_ID_RE.match(problem.display_id)
+    from_id = matched.groupdict() if matched else {}
+
+    school = str(front.get("school") or from_id.get("school") or "").strip().upper()
+    year = str(front.get("year") or from_id.get("year") or "").strip()
+    grade = str(front.get("grade") or from_id.get("grade") or "").strip()
+    semester = str(front.get("semester") or from_id.get("semester") or "").strip()
+    exam = str(front.get("exam") or from_id.get("exam") or "").strip().upper()
+    source_label = _extract_source_question_label(front, str(from_id.get("number", "")))
+
+    exam_parts: List[str] = []
+    if school:
+        exam_parts.append(school)
+    if year:
+        exam_parts.append(year)
+    if grade:
+        exam_parts.append(f"G{grade}")
+    if semester:
+        exam_parts.append(f"S{semester}")
+    if exam:
+        exam_parts.append(exam)
+    if source_label:
+        exam_parts.append(str(source_label))
+
+    return {
+        "source_exam_info": " ".join(exam_parts),
+        "source_unit_info": _extract_unit_path(front),
+    }
+
+
 def _extract_subject_name(front_matter: Dict[str, object]) -> str:
     unit_l1 = str(front_matter.get("unit_l1", "")).strip()
     if unit_l1:
-        return unit_l1
+        return CURRICULUM_SUFFIX_RE.sub("", unit_l1).strip()
     unit = str(front_matter.get("unit", "")).strip()
     if not unit:
         return ""
-    return unit.split(">", 1)[0].strip()
+    return CURRICULUM_SUFFIX_RE.sub("", unit.split(">", 1)[0].strip()).strip()
 
 
 def _build_exam_summary(problems: Sequence[ParsedProblem]) -> Dict[str, str]:
@@ -466,10 +520,13 @@ def _problem_to_template_context(
             _markdown_to_html(teacher_answer_md), base_dir, problem.display_id, warnings
         )
 
+    header_meta = _build_source_header_meta(problem)
     return {
         "number": number,
         "problem_id": problem.display_id,
         "source_info": _build_source_info(problem),
+        "source_exam_info": header_meta["source_exam_info"],
+        "source_unit_info": header_meta["source_unit_info"],
         "question_html": Markup(q_html),
         "choices_html": Markup(choices_html),
         "teacher_answer_html": Markup(teacher_answer_html),
@@ -590,7 +647,10 @@ def render_exam_pdf(
         paper=layout.paper,
         page_width_mm=layout.page_width_mm,
         page_height_mm=layout.page_height_mm,
-        margin_mm=layout.margin_mm,
+        margin_top_mm=layout.margin_top_mm,
+        margin_right_mm=layout.margin_right_mm,
+        margin_bottom_mm=layout.margin_bottom_mm,
+        margin_left_mm=layout.margin_left_mm,
         column_gap_mm=layout.column_gap_mm,
         columns=layout.columns,
         font_size_pt=layout.font_size_pt,

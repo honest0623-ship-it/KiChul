@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import re
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+CURRICULUM_SUFFIX_RE = re.compile(r"\s*\(2022개정\)\s*")
+
 
 @dataclass(frozen=True)
 class UnitL2:
@@ -123,6 +125,13 @@ def _compact(text: str) -> str:
     return token
 
 
+def strip_curriculum_suffix(text: str) -> str:
+    token = (text or "").strip()
+    if not token:
+        return ""
+    return CURRICULUM_SUFFIX_RE.sub("", token).strip()
+
+
 def make_unit_path(unit_l1: str, unit_l2: str, unit_l3: str) -> str:
     return ">".join([unit_l1.strip(), unit_l2.strip(), unit_l3.strip()])
 
@@ -183,7 +192,7 @@ def unit_tree_for_ui() -> List[Dict[str, object]]:
         rows.append(
             {
                 "id": _subject_node_id(subject.label),
-                "label": subject.label,
+                "label": strip_curriculum_suffix(subject.label),
                 "children": l2_rows,
             }
         )

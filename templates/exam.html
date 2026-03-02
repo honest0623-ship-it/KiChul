@@ -1,21 +1,27 @@
-﻿<!doctype html>
-<html lang="en">
+<!doctype html>
+<html lang="ko">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{ title }}</title>
   <style>
+    :root {
+      --line-color: #222;
+      --line-width: 0.9pt;
+    }
+
     @page {
       size: {{ page_width_mm }}mm {{ page_height_mm }}mm;
-      margin: {{ margin_mm }}mm;
+      margin: {{ margin_top_mm }}mm {{ margin_right_mm }}mm {{ margin_bottom_mm }}mm {{ margin_left_mm }}mm;
     }
 
     body {
       font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
       color: #111;
       font-size: {{ font_size_pt }}pt;
-      line-height: 1.52;
+      line-height: 1.44;
       margin: 0;
+      background: #fff;
     }
 
     .layout-root {
@@ -24,10 +30,10 @@
     }
 
     .problem-page {
-      min-height: {{ page_height_mm - (margin_mm * 2) }}mm;
+      min-height: {{ page_height_mm - margin_top_mm - margin_bottom_mm }}mm;
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      column-gap: {{ column_gap_mm }}mm;
+      column-gap: 0;
       box-sizing: border-box;
       break-after: page;
       page-break-after: always;
@@ -49,14 +55,30 @@
       min-width: 0;
       min-height: 0;
       box-sizing: border-box;
-      overflow: visible;
+      border: var(--line-width) solid var(--line-color);
+      background: #fff;
       break-inside: avoid;
       page-break-inside: avoid;
       -webkit-column-break-inside: avoid;
+      overflow: hidden;
     }
 
-    .problem-box + .problem-box {
-      margin-top: 0;
+    .problem-box + .problem-box { margin-top: 0; }
+
+    .problem-column .problem-box + .problem-box {
+      border-top: 0;
+    }
+
+    .problem-column:first-child .problem-box {
+      border-left: var(--line-width) solid var(--line-color);
+    }
+
+    .problem-column + .problem-column .problem-box {
+      border-left: 0;
+    }
+
+    .problem-column:last-child .problem-box {
+      border-right: var(--line-width) solid var(--line-color);
     }
 
     .problem-card {
@@ -67,39 +89,111 @@
       -webkit-column-break-inside: avoid;
     }
 
-    .problem-number {
-      font-weight: 700;
-      margin: 0 0 0.8mm 0;
+    .problem-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1.2mm;
+      border-bottom: var(--line-width) solid var(--line-color);
+      padding: 2mm 2.2mm 1.7mm 2.2mm;
     }
 
-    .problem-source {
-      margin: 0 0 1.2mm 0;
-      font-size: calc({{ font_size_pt }}pt - 1.6pt);
-      color: #5a6472;
+    .head-left {
+      min-width: 14mm;
+      font-size: calc({{ font_size_pt }}pt + 0.1pt);
+      font-weight: 700;
       letter-spacing: 0.01em;
+      line-height: 1.25;
+      padding-top: 0.3mm;
+      color: #c62828;
+    }
+
+    .head-right {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55mm;
+    }
+
+    .meta-line {
+      display: flex;
+      justify-content: flex-end;
+      align-items: baseline;
+      gap: 0;
+      min-width: 0;
+      font-size: calc({{ font_size_pt }}pt - 2.1pt);
+      line-height: 1.22;
+      color: #222;
+    }
+
+    .meta-value {
+      flex: 1;
+      min-width: 0;
+      text-align: right;
+      padding-right: 0.8mm;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      color: #333;
+    }
+
+    .meta-value.meta-exam {
+      color: #2e7d32;
+    }
+
+    .meta-value.placeholder {
+      color: #9aa3af !important;
+    }
+
+    .meta-value.meta-unit {
+      white-space: nowrap;
+      overflow-wrap: normal;
+      word-break: keep-all;
+      color: #1565c0;
+    }
+
+    .meta-value.meta-unit.force-wrap {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .problem-body {
+      padding: 2.1mm 2.3mm 2.3mm 2.3mm;
+      overflow: hidden;
     }
 
     .question p,
-    .choices p {
-      margin: 0 0 0.8mm 0;
+    .choices p,
+    .teacher-answer p {
+      margin: 0 0 0.85mm 0;
     }
 
     .question p:last-child,
-    .choices p:last-child {
+    .choices p:last-child,
+    .teacher-answer p:last-child {
       margin-bottom: 0;
     }
 
-    .question p:has(mjx-container[display="true"]),
-    .choices p:has(mjx-container[display="true"]) {
-      margin-bottom: 0.5mm;
+    .choices {
+      margin-top: 1.15mm;
+    }
+
+    .teacher-answer {
+      margin-top: 1.2mm;
+      padding-top: 0.7mm;
+      border-top: 0.5pt dashed #7a8698;
+      color: #0f172a;
+      font-size: calc({{ font_size_pt }}pt - 0.3pt);
+      font-weight: 700;
     }
 
     .MathJax_Display,
     mjx-container[display="true"],
     mjx-container[jax="CHTML"][display="true"],
     mjx-container[jax="SVG"][display="true"] {
-      margin-top: 0.6mm !important;
-      margin-bottom: 0.6mm !important;
+      margin-top: 0.45mm !important;
+      margin-bottom: 0.45mm !important;
       break-inside: avoid;
       page-break-inside: avoid;
       -webkit-column-break-inside: avoid;
@@ -110,47 +204,16 @@
       font-weight: 400 !important;
     }
 
-    mjx-container[jax="SVG"] {
-      color: #222;
-    }
-
-    mjx-container[jax="SVG"] svg {
-      opacity: 0.88;
-    }
-
-    mjx-container[display="false"],
-    mjx-container[jax="CHTML"][display="false"],
-    mjx-container[jax="SVG"][display="false"] {
-      vertical-align: -0.08em;
-      line-height: 1;
-    }
-
     .question img,
-    .choices img {
+    .choices img,
+    .teacher-answer img {
       display: block;
-      max-width: 30%;
+      max-width: 82%;
       height: auto;
       margin: 0.8mm auto;
       break-inside: avoid;
       page-break-inside: avoid;
       -webkit-column-break-inside: avoid;
-    }
-
-    .choices {
-      margin-top: 1mm;
-      break-inside: avoid;
-      page-break-inside: avoid;
-    }
-
-    .teacher-answer {
-      margin-top: 1.2mm;
-      color: #0f172a;
-      font-size: calc({{ font_size_pt }}pt - 0.2pt);
-      font-weight: 700;
-    }
-
-    .teacher-answer p {
-      margin: 0;
     }
 
     .problem-pool {
@@ -173,17 +236,28 @@
   <div id="problem-pool" class="problem-pool" aria-hidden="true">
     {% for problem in problems %}
       <section class="problem-card" data-number="{{ problem.number }}">
-        <p class="problem-number">{{ problem.number }}.</p>
-        {% if show_source_info and problem.source_info %}
-          <p class="problem-source">{{ problem.source_info }}</p>
-        {% endif %}
-        <div class="question">{{ problem.question_html }}</div>
-        {% if problem.choices_html %}
-          <div class="choices">{{ problem.choices_html }}</div>
-        {% endif %}
-        {% if show_teacher_answer and problem.teacher_answer_html %}
-          <div class="teacher-answer">{{ problem.teacher_answer_html }}</div>
-        {% endif %}
+        <header class="problem-head">
+          <div class="head-left">{{ problem.number }}번</div>
+          <div class="head-right">
+            {% set exam_info = problem.source_exam_info if show_source_info and problem.source_exam_info else "-" %}
+            {% set unit_info = problem.source_unit_info if show_source_info and problem.source_unit_info else "-" %}
+            <div class="meta-line">
+              <span class="meta-value meta-exam{% if exam_info == '-' %} placeholder{% endif %}">{{ exam_info }}</span>
+            </div>
+            <div class="meta-line">
+              <span class="meta-value meta-unit{% if unit_info == '-' %} placeholder{% endif %}">{{ unit_info }}</span>
+            </div>
+          </div>
+        </header>
+        <div class="problem-body">
+          <div class="question">{{ problem.question_html }}</div>
+          {% if problem.choices_html %}
+            <div class="choices">{{ problem.choices_html }}</div>
+          {% endif %}
+          {% if show_teacher_answer and problem.teacher_answer_html %}
+            <div class="teacher-answer">{{ problem.teacher_answer_html }}</div>
+          {% endif %}
+        </div>
       </section>
     {% endfor %}
   </div>
@@ -191,8 +265,11 @@
   <script>
     (function () {
       const pageHeightMm = {{ page_height_mm }};
-      const marginMm = {{ margin_mm }};
-      const columnGapMm = {{ column_gap_mm }};
+      const marginTopMm = {{ margin_top_mm }};
+      const marginBottomMm = {{ margin_bottom_mm }};
+      const columnGapMm = 0;
+      const columns = 2;
+      const boxGapMm = 0;
 
       function mmToPx(mm) {
         const probe = document.createElement("div");
@@ -210,6 +287,13 @@
         const prevMaxWidth = card.style.maxWidth;
         card.style.width = `${widthPx}px`;
         card.style.maxWidth = `${widthPx}px`;
+        const unitLines = card.querySelectorAll(".meta-value.meta-unit");
+        unitLines.forEach((line) => {
+          line.classList.remove("force-wrap");
+          if (line.scrollWidth > line.clientWidth + 1) {
+            line.classList.add("force-wrap");
+          }
+        });
         const h = card.getBoundingClientRect().height;
         card.style.width = prevWidth;
         card.style.maxWidth = prevMaxWidth;
@@ -223,10 +307,9 @@
         while (idx < items.length) {
           const pageColumns = [];
 
-          for (let col = 0; col < 2 && idx < items.length; col += 1) {
+          for (let col = 0; col < columns && idx < items.length; col += 1) {
             const first = items[idx];
 
-            // If a question exceeds one box (1/4 page), it must occupy the column alone.
             if (first.heightCol > boxHeightPx) {
               pageColumns.push([first]);
               idx += 1;
@@ -235,12 +318,9 @@
 
             const second = items[idx + 1];
             if (second && second.heightCol <= boxHeightPx) {
-              // Standard 4-slot mapping per page block:
-              // col1 => [1(top), 2(bottom)], col2 => [3(top), 4(bottom)]
               pageColumns.push([first, second]);
               idx += 2;
             } else {
-              // If next item is long, this short item stays alone in its column.
               pageColumns.push([first]);
               idx += 1;
             }
@@ -255,15 +335,14 @@
       function renderPages(root, pages, pageBodyHeightPx, boxHeightPx) {
         root.innerHTML = "";
 
-        pages.forEach((columns, pageIndex) => {
+        pages.forEach((columnsOnPage, pageIndex) => {
           const pageEl = document.createElement("section");
           pageEl.className = "problem-page";
           if (pageIndex === pages.length - 1) pageEl.classList.add("last");
           pageEl.style.minHeight = `${pageBodyHeightPx}px`;
 
-          const paddedColumns = [columns[0] || [], columns[1] || []];
-
-          paddedColumns.forEach((colItems) => {
+          for (let col = 0; col < columns; col += 1) {
+            const colItems = columnsOnPage[col] || [];
             const colEl = document.createElement("div");
             colEl.className = "problem-column";
 
@@ -293,7 +372,7 @@
             }
 
             pageEl.appendChild(colEl);
-          });
+          }
 
           root.appendChild(pageEl);
         });
@@ -303,8 +382,7 @@
         const root = document.getElementById("layout-root");
         const pool = document.getElementById("problem-pool");
         if (!root || !pool) return;
-        
-        // Ensure pool is rendered for measurement
+
         pool.style.display = "block";
 
         const cards = Array.from(pool.querySelectorAll(".problem-card"));
@@ -315,7 +393,7 @@
         }
 
         const pxPerMm = mmToPx(1);
-        const pageBodyHeightPx = (pageHeightMm - marginMm * 2) * pxPerMm;
+        const pageBodyHeightPx = (pageHeightMm - marginTopMm - marginBottomMm) * pxPerMm;
         const pageWidthPx = root.getBoundingClientRect().width;
         if (pageWidthPx <= 0) {
           pool.style.display = "none";
@@ -323,8 +401,9 @@
         }
 
         const colGapPx = columnGapMm * pxPerMm;
-        const columnWidthPx = (pageWidthPx - colGapPx) / 2;
-        const boxHeightPx = pageBodyHeightPx / 2;
+        const boxGapPx = boxGapMm * pxPerMm;
+        const columnWidthPx = (pageWidthPx - colGapPx * (columns - 1)) / columns;
+        const boxHeightPx = (pageBodyHeightPx - boxGapPx) / 2;
 
         pool.style.width = `${pageWidthPx}px`;
 
@@ -335,13 +414,10 @@
 
         const pages = buildPages(measured, boxHeightPx);
         renderPages(root, pages, pageBodyHeightPx, boxHeightPx);
-        
-        // Hide pool completely so it doesn't take up any layout space or trigger empty pages
         pool.style.display = "none";
       }
 
       window.__layoutProblemPages = layoutProblemPages;
-
       window.addEventListener("load", () => {
         setTimeout(() => {
           layoutProblemPages();

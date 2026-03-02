@@ -175,12 +175,18 @@ def _build_layout(
     if paper_key == "A4":
         page_width_mm = 210
         page_height_mm = 297
-        margin_mm = 13
+        margin_top_mm = 15
+        margin_right_mm = 12
+        margin_bottom_mm = 15
+        margin_left_mm = 12
         column_gap_mm = 9
     elif paper_key == "B4":
         page_width_mm = 257
         page_height_mm = 364
-        margin_mm = 13
+        margin_top_mm = 15
+        margin_right_mm = 12
+        margin_bottom_mm = 15
+        margin_left_mm = 12
         column_gap_mm = 11
     else:
         raise ValueError(f"Unsupported paper type: {paper}")
@@ -189,7 +195,10 @@ def _build_layout(
         paper=paper_key,
         page_width_mm=page_width_mm,
         page_height_mm=page_height_mm,
-        margin_mm=margin_mm,
+        margin_top_mm=margin_top_mm,
+        margin_right_mm=margin_right_mm,
+        margin_bottom_mm=margin_bottom_mm,
+        margin_left_mm=margin_left_mm,
         column_gap_mm=column_gap_mm,
         columns=columns,
         font_size_pt=font_size,
