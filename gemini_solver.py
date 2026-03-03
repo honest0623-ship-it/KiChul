@@ -4,11 +4,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 import base64
-import json
 import re
 import time
 
 import requests
+
+from ai_solver_utils import (
+    extract_json_object as _extract_json_object,
+    parse_retry_after_seconds as _parse_retry_after_seconds,
+    should_retry_status as _should_retry_status,
+)
 
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com"
@@ -158,36 +163,6 @@ def _strip_score_tokens(text: str) -> str:
     return SCORE_TOKEN_RE.sub("", text).strip()
 
 
-def _extract_json_object(raw_text: str) -> Dict[str, Any]:
-    direct = raw_text.strip()
-    if direct.startswith("```"):
-        direct = re.sub(r"^```(?:json)?\s*", "", direct)
-        direct = re.sub(r"\s*```$", "", direct)
-
-    for candidate in (direct, raw_text):
-        try:
-            parsed = json.loads(candidate)
-        except json.JSONDecodeError:
-            pass
-        else:
-            if isinstance(parsed, dict):
-                return parsed
-
-    decoder = json.JSONDecoder()
-    for candidate in (direct, raw_text):
-        for idx, char in enumerate(candidate):
-            if char != "{":
-                continue
-            try:
-                parsed, _ = decoder.raw_decode(candidate[idx:])
-            except json.JSONDecodeError:
-                continue
-            if isinstance(parsed, dict):
-                return parsed
-
-    raise ValueError("AI response does not contain a valid JSON object.")
-
-
 def _normalize_qtype(raw: Any) -> str:
     token = str(raw or "").strip().lower()
     if "객관" in token or "multiple" in token or "choice" in token:
@@ -280,23 +255,6 @@ def _post_generate_content(
         json=payload,
         timeout=timeout_sec,
     )
-
-
-def _parse_retry_after_seconds(response: requests.Response) -> Optional[int]:
-    raw = (response.headers.get("Retry-After") or "").strip()
-    if not raw:
-        return None
-    try:
-        seconds = int(float(raw))
-    except ValueError:
-        return None
-    if seconds <= 0:
-        return None
-    return seconds
-
-
-def _should_retry_status(status_code: int) -> bool:
-    return status_code in {408, 429, 500, 502, 503, 504}
 
 
 def _post_generate_content_with_retry(

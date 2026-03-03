@@ -588,11 +588,19 @@ def _extract_solution_text(raw: str) -> str:
 
 
 def _companion_indexes(
-    original_dir: Path, subjective_offset: int
-) -> Tuple[Dict[int, Path], Dict[int, Path]]:
+    images: Sequence[Path], subjective_offset: int
+) -> Tuple[Dict[int, Path], Dict[int, Path], Dict[int, Path]]:
     answer_index: Dict[int, Path] = {}
     solution_index: Dict[int, Path] = {}
-    for item in list_original_images(original_dir):
+    scan_index: Dict[int, Path] = {}
+    for item in images:
+        if _is_scan_companion(item.stem):
+            base_stem = _strip_scan_suffix(item.stem)
+            problem_no = _extract_problem_no_from_name(base_stem, subjective_offset=subjective_offset)
+            if problem_no is not None:
+                scan_index.setdefault(problem_no, item)
+            continue
+
         kind = _companion_kind(item.stem)
         if kind is None:
             continue
@@ -603,20 +611,7 @@ def _companion_indexes(
             answer_index.setdefault(problem_no, item)
         else:
             solution_index.setdefault(problem_no, item)
-    return answer_index, solution_index
-
-
-def _scan_companion_index(original_dir: Path, subjective_offset: int) -> Dict[int, Path]:
-    index: Dict[int, Path] = {}
-    for item in list_original_images(original_dir):
-        if not _is_scan_companion(item.stem):
-            continue
-        base_stem = _strip_scan_suffix(item.stem)
-        problem_no = _extract_problem_no_from_name(base_stem, subjective_offset=subjective_offset)
-        if problem_no is None:
-            continue
-        index.setdefault(problem_no, item)
-    return index
+    return answer_index, solution_index, scan_index
 
 
 def _write_scan_png(scan_source: Path, scan_target: Path) -> Optional[str]:
@@ -698,7 +693,6 @@ def _build_problem_markdown(
     config: IngestConfig,
     qtype: str,
     source_question_no: Optional[int],
-    problem_no: Optional[int],
     original_asset_filename: str,
     extracted_text: str,
     ocr_warning: Optional[str],
@@ -802,9 +796,12 @@ assets:
 
 
 def build_candidates(
-    original_dir: Path, subjective_offset: int = 100
+    original_dir: Path,
+    subjective_offset: int = 100,
+    images: Optional[Sequence[Path]] = None,
 ) -> List[ImageCandidate]:
-    candidates = [detect_candidate(path=item, subjective_offset=subjective_offset) for item in list_original_images(original_dir)]
+    source_images = list(images) if images is not None else list_original_images(original_dir)
+    candidates = [detect_candidate(path=item, subjective_offset=subjective_offset) for item in source_images]
     return [item for item in candidates if item.qtype]
 
 
@@ -819,18 +816,20 @@ def ingest_images(
     warnings: List[str] = []
     results: List[IngestResult] = []
 
-    all_candidates = build_candidates(original_dir=original_dir, subjective_offset=config.subjective_offset)
+    original_images = list_original_images(original_dir)
+    all_candidates = build_candidates(
+        original_dir=original_dir,
+        subjective_offset=config.subjective_offset,
+        images=original_images,
+    )
     if selected_filenames is None:
         candidates = all_candidates
     else:
         selected = set(selected_filenames)
         candidates = [item for item in all_candidates if item.filename in selected]
 
-    answer_index, solution_index = _companion_indexes(
-        original_dir=original_dir, subjective_offset=config.subjective_offset
-    )
-    scan_index = _scan_companion_index(
-        original_dir=original_dir, subjective_offset=config.subjective_offset
+    answer_index, solution_index, scan_index = _companion_indexes(
+        images=original_images, subjective_offset=config.subjective_offset
     )
 
     ai_provider = (config.ai_provider or "gemini").strip().lower()
@@ -1154,7 +1153,6 @@ def ingest_images(
                 config=config,
                 qtype=effective_qtype,
                 source_question_no=item.source_question_no,
-                problem_no=problem_no,
                 original_asset_filename=dest_file.name,
                 extracted_text=extracted_text,
                 ocr_warning=ocr_warning,

@@ -533,21 +533,6 @@ def _problem_to_template_context(
     }
 
 
-def _chunk_problem_pages(
-    items: Sequence[Dict[str, object]], page_size: int = 4
-) -> List[List[Dict[str, object] | None]]:
-    if page_size <= 0:
-        raise ValueError("page_size must be > 0")
-
-    pages: List[List[Dict[str, object] | None]] = []
-    for idx in range(0, len(items), page_size):
-        chunk = list(items[idx : idx + page_size])
-        while len(chunk) < page_size:
-            chunk.append(None)
-        pages.append(chunk)
-    return pages
-
-
 def _render_html_to_pdf(
     html_content: str,
     out_pdf: Path,
@@ -633,7 +618,6 @@ def render_exam_pdf(
         )
         for idx, problem in enumerate(problems, start=1)
     ]
-    problem_pages = _chunk_problem_pages(items, page_size=4)
     exam_summary = _build_exam_summary(problems)
 
     html_content = template.render(
@@ -656,7 +640,6 @@ def render_exam_pdf(
         font_size_pt=layout.font_size_pt,
         exam_summary=exam_summary,
         problems=items,
-        problem_pages=problem_pages,
     )
     _render_html_to_pdf(html_content=html_content, out_pdf=out_pdf, warnings=warnings)
 
