@@ -68,6 +68,8 @@ DEFAULTS = {
     "copy_to_scan_png": "0",
     "move_after_ingest": "1",
 }
+SORT_FIELDS = {"default", "unit", "school", "year"}
+SORT_ORDERS = {"asc", "desc"}
 
 app = Flask(__name__)
 app.secret_key = "math_kichul_local_admin"
@@ -306,6 +308,65 @@ def _sort_exam_values(values: List[str]) -> List[str]:
     return sorted(values, key=key)
 
 
+def _normalize_sort_field(raw: str) -> str:
+    token = (raw or "").strip().lower()
+    if token in SORT_FIELDS:
+        return token
+    return "default"
+
+
+def _normalize_sort_order(raw: str) -> str:
+    token = (raw or "").strip().lower()
+    if token in SORT_ORDERS:
+        return token
+    return "asc"
+
+
+def _sort_selected_problem_ids(
+    selected_problem_ids: List[str],
+    problem_meta: List[Dict[str, str]],
+    sort_field: str,
+    sort_order: str,
+) -> List[str]:
+    sort_field = _normalize_sort_field(sort_field)
+    sort_order = _normalize_sort_order(sort_order)
+    items = list(selected_problem_ids)
+
+    if len(items) < 2:
+        return items
+
+    if sort_field == "default":
+        if sort_order == "desc":
+            items.reverse()
+        return items
+
+    meta_by_id = {item["id"]: item for item in problem_meta}
+
+    def _as_int(value: str, fallback: int) -> int:
+        token = str(value or "").strip()
+        return int(token) if token.isdigit() else fallback
+
+    def _key(problem_id: str) -> tuple[Any, ...]:
+        row = meta_by_id.get(problem_id, {})
+        school = str(row.get("school", "")).strip()
+        year = _as_int(str(row.get("year", "")), 9999)
+        grade = _as_int(str(row.get("grade", "")), 99)
+        semester = _as_int(str(row.get("semester", "")), 99)
+        exam = str(row.get("exam", "")).strip()
+        unit = str(row.get("unit", "")).strip()
+        number = _as_int(str(row.get("number", "")), 999)
+
+        if sort_field == "unit":
+            return (unit, school, year, grade, semester, exam, number, problem_id)
+        if sort_field == "school":
+            return (school, year, grade, semester, exam, unit, number, problem_id)
+        if sort_field == "year":
+            return (year, school, grade, semester, exam, unit, number, problem_id)
+        return (problem_id,)
+
+    return sorted(items, key=_key, reverse=(sort_order == "desc"))
+
+
 def _build_pdf_filter_options(problem_meta: List[Dict[str, str]]) -> Dict[str, Any]:
     source_labels = set(_distinct_values(problem_meta, "source_label"))
     source_labels.update(DEFAULT_SOURCE_LABELS)
@@ -345,6 +406,8 @@ def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) ->
         "source_numbers": pick_all_when_empty("source_numbers"),
         "pattern": request.args.get("selector_pattern", ""),
         "selector_ids": request.args.get("selector_ids", ""),
+        "sort_field": _normalize_sort_field(request.args.get("sort_field", "default")),
+        "sort_order": _normalize_sort_order(request.args.get("sort_order", "asc")),
         "question_count": request.args.get("question_count", "0"),
         "show_source_info": request.args.get("show_source_info", "1") != "0",
         "teacher_view": request.args.get("teacher_view", "0") == "1",
@@ -685,6 +748,8 @@ def render_pdf():
 
     selector_ids = _extract_ids(request.form.get("selector_ids", ""))
     pattern = request.form.get("selector_pattern", "").strip()
+    sort_field = _normalize_sort_field(request.form.get("sort_field", "default"))
+    sort_order = _normalize_sort_order(request.form.get("sort_order", "asc"))
     question_count = max(_parse_int(request.form.get("question_count", "0"), 0), 0)
     show_source_info = bool(request.form.get("show_source_info"))
     teacher_view = bool(request.form.get("teacher_view"))
@@ -723,6 +788,13 @@ def render_pdf():
     if pattern:
         selected_problem_ids = [item for item in selected_problem_ids if fnmatch.fnmatch(item, pattern)]
 
+    selected_problem_ids = _sort_selected_problem_ids(
+        selected_problem_ids=selected_problem_ids,
+        problem_meta=problem_meta,
+        sort_field=sort_field,
+        sort_order=sort_order,
+    )
+
     if question_count > 0:
         selected_problem_ids = selected_problem_ids[:question_count]
 
@@ -755,6 +827,8 @@ def render_pdf():
             "levels": levels,
             "source_numbers": source_numbers,
             "selector_pattern": pattern,
+            "sort_field": sort_field,
+            "sort_order": sort_order,
             "question_count": str(question_count),
             "show_source_info": "1" if show_source_info else "0",
             "teacher_view": "1" if teacher_view else "0",
@@ -871,6 +945,8 @@ def render_pdf():
         "levels": levels,
         "source_numbers": source_numbers,
         "selector_pattern": pattern,
+        "sort_field": sort_field,
+        "sort_order": sort_order,
         "question_count": str(question_count),
         "show_source_info": "1" if show_source_info else "0",
         "teacher_view": "1" if teacher_view else "0",

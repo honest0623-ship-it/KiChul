@@ -610,6 +610,22 @@
         <div class="form-grid">
           <div><label for="selector_pattern">추가 Pattern 필터</label><input id="selector_pattern" type="text" name="selector_pattern" value="{{ pdf_selected.pattern }}" placeholder="예: HN-2025-G1-S1-MID-*" /></div>
           <div><label for="selector_ids">IDs 직접 지정</label><textarea id="selector_ids" name="selector_ids" placeholder="HN-2025-G1-S1-MID-006 HN-2025-G1-S1-MID-008">{{ pdf_selected.selector_ids }}</textarea></div>
+          <div>
+            <label for="sort_field">정렬 기준</label>
+            <select id="sort_field" name="sort_field">
+              <option value="default" {% if pdf_selected.sort_field == "default" %}selected{% endif %}>기본(ID 순)</option>
+              <option value="unit" {% if pdf_selected.sort_field == "unit" %}selected{% endif %}>단원별</option>
+              <option value="school" {% if pdf_selected.sort_field == "school" %}selected{% endif %}>학교별</option>
+              <option value="year" {% if pdf_selected.sort_field == "year" %}selected{% endif %}>연도별</option>
+            </select>
+          </div>
+          <div>
+            <label for="sort_order">정렬 방향</label>
+            <select id="sort_order" name="sort_order">
+              <option value="asc" {% if pdf_selected.sort_order == "asc" %}selected{% endif %}>오름차순</option>
+              <option value="desc" {% if pdf_selected.sort_order == "desc" %}selected{% endif %}>내림차순</option>
+            </select>
+          </div>
           <div><label for="paper">Paper</label><select id="paper" name="paper"><option value="A4" selected>A4</option><option value="B4">B4</option></select></div>
           <div><label for="columns">Columns</label><input id="columns" type="number" name="columns" value="2" /></div>
           <div><label for="question_count">출제 문항수 (0=전체)</label><input id="question_count" type="number" name="question_count" min="0" value="{{ pdf_selected.question_count }}" /></div>
