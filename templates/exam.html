@@ -7,7 +7,8 @@
   <style>
     :root {
       --line-color: #222;
-      --line-width: 0.9pt;
+      --line-width: 1.4pt;
+      --content-width: {{ page_width_mm - margin_left_mm - margin_right_mm }}mm;
     }
 
     @page {
@@ -22,19 +23,25 @@
       line-height: 1.44;
       margin: 0;
       background: #fff;
+      width: var(--content-width);
+      max-width: var(--content-width);
     }
 
     .layout-root {
+      width: var(--content-width);
+      max-width: var(--content-width);
       margin: 0;
       padding: 0;
     }
 
     .problem-page {
+      width: 100%;
       min-height: {{ page_height_mm - margin_top_mm - margin_bottom_mm }}mm;
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       column-gap: 0;
       box-sizing: border-box;
+      border-right: var(--line-width) solid var(--line-color);
       break-after: page;
       page-break-after: always;
     }
@@ -78,7 +85,7 @@
     }
 
     .problem-column:last-child .problem-box {
-      border-right: var(--line-width) solid var(--line-color);
+      border-right: 0;
     }
 
     .problem-card {
@@ -217,6 +224,8 @@
     }
 
     .problem-pool {
+      width: var(--content-width);
+      max-width: var(--content-width);
       position: absolute;
       visibility: hidden;
       pointer-events: none;

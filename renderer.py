@@ -87,7 +87,7 @@ window.addEventListener('load', () => {
 PDF_EMPTY_HEADER_TEMPLATE = "<div></div>"
 
 PDF_FOOTER_TEMPLATE = """
-<div style="width:100%; font-size:9px; color:#222; text-align:center; line-height:1; transform:translateY(-3.8mm);">
+<div style="width:100%; font-size:10px; color:#111; text-align:center; line-height:1.1; padding-top:2px;">
   <span class="pageNumber"></span>/<span class="totalPages"></span>
 </div>
 """
