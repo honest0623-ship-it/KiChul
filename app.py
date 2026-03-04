@@ -1,14 +1,27 @@
 ﻿from __future__ import annotations
 
 import fnmatch
+from html import escape
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
 from typing import Any, Dict, List
+from urllib.parse import urlparse
 
-from flask import Flask, flash, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    abort,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    url_for,
+)
+import markdown
 from parser import parse_problem_file
 from unit_taxonomy import (
     LEAF_PATHS,
@@ -23,6 +36,7 @@ from unit_taxonomy import (
 BASE_DIR = Path(__file__).resolve().parent
 DB_PROBLEMS_DIR = BASE_DIR / "db" / "problems"
 OUTPUT_DIR = BASE_DIR / "output"
+VENDOR_DIR = BASE_DIR / "vendor"
 PROBLEM_ID_RE = re.compile(
     r"^(?P<school>[^-]+)-(?P<year>\d{4})-G(?P<grade>\d+)-S(?P<semester>\d+)-(?P<exam>[^-]+)-(?P<number>\d{3})$"
 )
@@ -30,6 +44,15 @@ SOURCE_NO_TAG_RE = re.compile(r"異쒖젣踰덊샇-(\d+)")
 DEFAULT_OBJECTIVE_SOURCE_NUMBERS = [str(num) for num in range(1, 21)]
 DEFAULT_SUBJECTIVE_SOURCE_NUMBERS = [f"SUB{num}" for num in range(1, 7)]
 DEFAULT_SOURCE_LABELS = [*DEFAULT_OBJECTIVE_SOURCE_NUMBERS, *DEFAULT_SUBJECTIVE_SOURCE_NUMBERS]
+IMG_TAG_RE = re.compile(
+    r"<img\b(?P<before>[^>]*?)\bsrc=(?P<quote>[\"'])(?P<src>.*?)(?P=quote)(?P<after>[^>]*)>",
+    re.IGNORECASE,
+)
+MATH_PLACEHOLDER_RE = re.compile(r"@@MATH_BLOCK_(\d+)@@")
+MATH_SEGMENT_RE = re.compile(
+    r"(\$\$.*?\$\$|\\\[.*?\\\]|\\\(.*?\\\)|\$(?:\\.|[^$\n\\])+\$)",
+    re.DOTALL,
+)
 
 DEFAULTS = {
     "school": "HN",
@@ -190,6 +213,92 @@ def _extract_level_from_front_matter(front_matter: Dict[str, Any]) -> str:
         token = str(raw).strip()
         if token.isdigit():
             return str(int(token))
+    return ""
+
+
+def _resolve_problem_folder(problem_id: str) -> Path | None:
+    token = (problem_id or "").strip()
+    if not PROBLEM_ID_RE.match(token):
+        return None
+    folder = DB_PROBLEMS_DIR / token
+    if not folder.is_dir():
+        return None
+    return folder
+
+
+def _is_external_src(src: str) -> bool:
+    parsed = urlparse(src)
+    return bool(parsed.scheme) or src.startswith("//")
+
+
+def _markdown_to_html_preview(md_text: str) -> str:
+    source = md_text or ""
+    source = re.sub(
+        r"(\\\[.*?\\\]|\$\$.*?\$\$)\n{2,}(?=\S)",
+        r"\1\n",
+        source,
+        flags=re.DOTALL,
+    )
+
+    saved_math: List[str] = []
+
+    def stash_math(match: re.Match[str]) -> str:
+        saved_math.append(match.group(1))
+        return f"@@MATH_BLOCK_{len(saved_math) - 1}@@"
+
+    protected = MATH_SEGMENT_RE.sub(stash_math, source)
+    converter = markdown.Markdown(extensions=["extra", "sane_lists", "nl2br"])
+    html_text = converter.convert(protected)
+
+    def restore_math(match: re.Match[str]) -> str:
+        index = int(match.group(1))
+        if index < 0 or index >= len(saved_math):
+            return match.group(0)
+        return escape(saved_math[index], quote=False)
+
+    return MATH_PLACEHOLDER_RE.sub(restore_math, html_text)
+
+
+def _rewrite_preview_img_sources(html_text: str, problem_id: str) -> str:
+    problem_folder = _resolve_problem_folder(problem_id)
+    if problem_folder is None:
+        return html_text
+
+    base = problem_folder.resolve()
+
+    def replace(match: re.Match[str]) -> str:
+        before = match.group("before")
+        quote = match.group("quote")
+        src = match.group("src")
+        after = match.group("after")
+
+        source = src.strip()
+        if not source or _is_external_src(source):
+            return match.group(0)
+
+        normalized = source.replace("\\", "/").lstrip("./")
+        if not normalized:
+            return ""
+
+        candidate = (problem_folder / normalized).resolve()
+        try:
+            candidate.relative_to(base)
+        except ValueError:
+            return ""
+
+        if not candidate.is_file():
+            return ""
+
+        resolved = url_for("problem_asset", problem_id=problem_id, asset_rel=normalized)
+        return f"<img{before}src={quote}{resolved}{quote}{after}>"
+
+    return IMG_TAG_RE.sub(replace, html_text)
+
+
+def _resolve_mathjax_bundle_uri() -> str:
+    bundle = VENDOR_DIR / "mathjax" / "tex-svg.js"
+    if bundle.is_file():
+        return url_for("vendor_asset", asset_rel="mathjax/tex-svg.js")
     return ""
 
 
@@ -408,6 +517,81 @@ def index():
         pdf_selected=pdf_selected,
         problem_meta=problem_meta,
         output_dir=OUTPUT_DIR,
+        mathjax_bundle_uri=_resolve_mathjax_bundle_uri(),
+    )
+
+
+@app.get("/vendor-assets/<path:asset_rel>")
+def vendor_asset(asset_rel: str):
+    rel_path = (asset_rel or "").replace("\\", "/").strip()
+    if not rel_path:
+        abort(404)
+
+    target = (VENDOR_DIR / rel_path).resolve()
+    try:
+        target.relative_to(VENDOR_DIR.resolve())
+    except ValueError:
+        abort(403)
+    if not target.is_file():
+        abort(404)
+
+    return send_from_directory(str(VENDOR_DIR), rel_path)
+
+
+@app.get("/api/problem-asset/<problem_id>/<path:asset_rel>")
+def problem_asset(problem_id: str, asset_rel: str):
+    folder = _resolve_problem_folder(problem_id)
+    if folder is None:
+        abort(404)
+
+    rel_path = (asset_rel or "").replace("\\", "/").strip()
+    if not rel_path:
+        abort(404)
+
+    target = (folder / rel_path).resolve()
+    try:
+        target.relative_to(folder.resolve())
+    except ValueError:
+        abort(403)
+
+    if not target.is_file():
+        abort(404)
+
+    return send_from_directory(str(folder), rel_path)
+
+
+@app.get("/api/problem-preview")
+def problem_preview():
+    problem_id = request.args.get("id", "").strip()
+    folder = _resolve_problem_folder(problem_id)
+    if folder is None:
+        return jsonify({"error": "problem-not-found"}), 404
+
+    problem_md = folder / "problem.md"
+    if not problem_md.is_file():
+        return jsonify({"error": "problem-file-not-found"}), 404
+
+    try:
+        parsed = parse_problem_file(problem_md)
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": "problem-parse-failed", "detail": str(exc)}), 500
+
+    question_html = _rewrite_preview_img_sources(
+        _markdown_to_html_preview(parsed.q),
+        problem_id,
+    )
+    choices_html = _rewrite_preview_img_sources(
+        _markdown_to_html_preview(parsed.choices),
+        problem_id,
+    )
+
+    return jsonify(
+        {
+            "id": parsed.display_id,
+            "question_html": question_html,
+            "choices_html": choices_html,
+            "warnings": parsed.warnings,
+        }
     )
 
 

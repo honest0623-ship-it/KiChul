@@ -237,6 +237,15 @@
       border-color: #3b82f6;
       box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
     }
+    .manual-order-item.selected {
+      border-color: #2563eb;
+      background: #eff6ff;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.16);
+    }
+    .manual-order-item:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 1px;
+    }
     .manual-order-handle {
       color: #64748b;
       font-weight: 700;
@@ -255,11 +264,85 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .manual-order-main {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+    }
+    .manual-preview-panel {
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px 10px;
+      min-height: 220px;
+    }
+    .manual-preview-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .manual-preview-subtitle {
+      margin-top: 2px;
+      color: #64748b;
+      font-size: 12px;
+      word-break: break-all;
+    }
+    .manual-preview-content {
+      margin-top: 8px;
+      max-height: 340px;
+      overflow: auto;
+      font-size: 13px;
+      line-height: 1.45;
+      color: #111827;
+    }
+    .manual-preview-content p {
+      margin: 0 0 6px 0;
+    }
+    .manual-preview-content p:last-child {
+      margin-bottom: 0;
+    }
+    .manual-preview-content img {
+      display: block;
+      max-width: 60%;
+      height: auto;
+      margin: 8px auto;
+    }
+    .manual-preview-block + .manual-preview-block {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px dashed #d1d5db;
+    }
+    .manual-preview-label {
+      margin-bottom: 5px;
+      font-size: 12px;
+      color: #475569;
+      font-weight: 800;
+    }
+    .manual-preview-empty {
+      color: #6b7280;
+      font-size: 12px;
+    }
     @media (max-width: 1050px) {
       .meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .form-grid { grid-template-columns: 1fr; }
+      .manual-order-main { grid-template-columns: 1fr; }
     }
   </style>
+  {% if mathjax_bundle_uri %}
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true
+      },
+      svg: { fontCache: 'none' }
+    };
+  </script>
+  <script defer src="{{ mathjax_bundle_uri }}"></script>
+  {% endif %}
 </head>
 <body>
   <div class="wrap">
@@ -509,7 +592,16 @@
               <button class="btn secondary js-load-filtered-order" type="button" style="padding: 6px 10px;">필터 결과 불러오기</button>
               <button class="btn secondary js-clear-manual-order" type="button" style="padding: 6px 10px;">수동 순서 초기화</button>
             </div>
-            <ul id="manual-order-list" class="manual-order-list"></ul>
+            <div class="manual-order-main">
+              <ul id="manual-order-list" class="manual-order-list"></ul>
+              <aside class="manual-preview-panel">
+                <div class="manual-preview-title" id="manual-preview-title">문항 미리보기</div>
+                <div class="manual-preview-subtitle" id="manual-preview-subtitle">문항을 선택하면 미리보기가 표시됩니다.</div>
+                <div class="manual-preview-content" id="manual-preview-content">
+                  <p class="manual-preview-empty">문항을 마우스로 클릭하거나, 선택된 문항에서 방향키로 이동하면 미리보기가 갱신됩니다.</p>
+                </div>
+              </aside>
+            </div>
           </div>
         </div>
 
@@ -659,10 +751,17 @@
       const selectorPatternInput = document.getElementById("selector_pattern");
       const manualOrderIdsInput = document.getElementById("manual_order_ids");
       const manualOrderList = document.getElementById("manual-order-list");
+      const manualPreviewTitle = document.getElementById("manual-preview-title");
+      const manualPreviewSubtitle = document.getElementById("manual-preview-subtitle");
+      const manualPreviewContent = document.getElementById("manual-preview-content");
       const sortFieldInput = document.getElementById("sort_field");
       const sortOrderInput = document.getElementById("sort_order");
       const loadFilteredOrderBtn = document.querySelector(".js-load-filtered-order");
       const clearManualOrderBtn = document.querySelector(".js-clear-manual-order");
+      const defaultPreviewMessage = "문항을 마우스로 클릭하거나, 선택된 문항에서 방향키로 이동하면 미리보기가 갱신됩니다.";
+      let selectedManualOrderId = "";
+      let previewAbortController = null;
+      const previewCache = new Map();
 
       const parseIds = (raw) => {
         const token = (raw || "").trim();
@@ -732,14 +831,141 @@
           .filter(Boolean);
       };
 
+      const escapeHtml = (raw) =>
+        String(raw || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+
+      const setPreviewEmpty = (message, subtitle = "문항을 선택하면 미리보기가 표시됩니다.") => {
+        if (manualPreviewTitle) manualPreviewTitle.textContent = "문항 미리보기";
+        if (manualPreviewSubtitle) manualPreviewSubtitle.textContent = subtitle;
+        if (manualPreviewContent) {
+          manualPreviewContent.innerHTML = `<p class="manual-preview-empty">${escapeHtml(message)}</p>`;
+        }
+      };
+
+      const buildPreviewSubtitle = (problemId) => {
+        const row = problemMetaById.get(problemId);
+        if (!row) return problemId;
+        const examInfo = `${row.school} ${row.year} G${row.grade} S${row.semester} ${row.exam}`;
+        const pieces = [examInfo];
+        if (row.source_label) {
+          pieces.push(`기출번호 ${row.source_label}`);
+        }
+        if (row.unit) {
+          pieces.push(row.unit);
+        }
+        return pieces.join(" | ");
+      };
+
+      const renderPreviewPayload = (problemId, payload) => {
+        if (manualPreviewTitle) manualPreviewTitle.textContent = "문항 미리보기";
+        if (manualPreviewSubtitle) manualPreviewSubtitle.textContent = buildPreviewSubtitle(problemId);
+        if (!manualPreviewContent) return;
+
+        const questionHtml = String((payload && payload.question_html) || "").trim();
+        const choicesHtml = String((payload && payload.choices_html) || "").trim();
+        const blocks = [
+          `
+            <section class="manual-preview-block">
+              <div class="manual-preview-label">문항</div>
+              ${questionHtml || '<p class="manual-preview-empty">문항 본문이 비어 있습니다.</p>'}
+            </section>
+          `,
+        ];
+        if (choicesHtml) {
+          blocks.push(`
+            <section class="manual-preview-block">
+              <div class="manual-preview-label">선택지</div>
+              ${choicesHtml}
+            </section>
+          `);
+        }
+
+        manualPreviewContent.innerHTML = blocks.join("");
+        if (window.MathJax && typeof window.MathJax.typesetPromise === "function") {
+          window.MathJax.typesetPromise([manualPreviewContent]).catch(() => {});
+        }
+      };
+
+      const loadProblemPreview = async (problemId) => {
+        if (!problemId) {
+          setPreviewEmpty(defaultPreviewMessage);
+          return;
+        }
+
+        if (previewCache.has(problemId)) {
+          renderPreviewPayload(problemId, previewCache.get(problemId));
+          return;
+        }
+
+        if (previewAbortController) {
+          previewAbortController.abort();
+        }
+        previewAbortController = new AbortController();
+
+        if (manualPreviewTitle) manualPreviewTitle.textContent = "문항 미리보기";
+        if (manualPreviewSubtitle) manualPreviewSubtitle.textContent = buildPreviewSubtitle(problemId);
+        if (manualPreviewContent) {
+          manualPreviewContent.innerHTML = '<p class="manual-preview-empty">미리보기를 불러오는 중입니다...</p>';
+        }
+
+        try {
+          const response = await fetch(`/api/problem-preview?id=${encodeURIComponent(problemId)}`, {
+            signal: previewAbortController.signal,
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const payload = await response.json();
+          previewCache.set(problemId, payload);
+          if (selectedManualOrderId !== problemId) return;
+          renderPreviewPayload(problemId, payload);
+        } catch (error) {
+          if (error && error.name === "AbortError") return;
+          if (selectedManualOrderId !== problemId) return;
+          const message = error && error.message ? error.message : "알 수 없는 오류";
+          setPreviewEmpty(`미리보기를 불러오지 못했습니다. (${message})`, buildPreviewSubtitle(problemId));
+        }
+      };
+
+      const applyManualSelectionState = () => {
+        if (!manualOrderList) return;
+        manualOrderList.querySelectorAll(".manual-order-item").forEach((node) => {
+          const itemId = node.dataset.id || "";
+          const selected = !!selectedManualOrderId && itemId === selectedManualOrderId;
+          node.classList.toggle("selected", selected);
+          node.setAttribute("aria-selected", selected ? "true" : "false");
+        });
+      };
+
+      const selectManualOrderItem = (problemId) => {
+        selectedManualOrderId = problemId || "";
+        applyManualSelectionState();
+        if (!selectedManualOrderId) {
+          setPreviewEmpty(defaultPreviewMessage);
+          return;
+        }
+        loadProblemPreview(selectedManualOrderId);
+      };
+
       const renderManualOrderList = (ids) => {
         if (!manualOrderList) return;
+        manualOrderList.setAttribute("role", "listbox");
         manualOrderList.innerHTML = "";
+        if (selectedManualOrderId && !ids.includes(selectedManualOrderId)) {
+          selectedManualOrderId = "";
+        }
+
         if (!ids.length) {
           const empty = document.createElement("li");
           empty.className = "muted";
           empty.textContent = "정렬할 문항 목록이 없습니다. '필터 결과 불러오기'를 눌러주세요.";
           manualOrderList.appendChild(empty);
+          setPreviewEmpty(defaultPreviewMessage);
           return;
         }
 
@@ -755,11 +981,46 @@
           item.className = "manual-order-item";
           item.draggable = true;
           item.dataset.id = id;
+          item.tabIndex = 0;
+          item.setAttribute("role", "option");
+          item.setAttribute("aria-selected", "false");
           item.innerHTML = `
             <span class="manual-order-handle">${index + 1}.</span>
             <span class="manual-order-id">${id}</span>
             <span class="manual-order-meta">${examLabel}${unitLabel ? ` | ${unitLabel}` : ""}</span>
           `;
+
+          item.addEventListener("click", () => {
+            selectManualOrderItem(id);
+          });
+
+          item.addEventListener("keydown", (event) => {
+            if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter" && event.key !== " ") {
+              return;
+            }
+
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              selectManualOrderItem(id);
+              return;
+            }
+
+            const currentIds = getManualListIds();
+            const currentIndex = currentIds.indexOf(id);
+            if (currentIndex < 0) return;
+            const nextIndex = event.key === "ArrowDown"
+              ? Math.min(currentIds.length - 1, currentIndex + 1)
+              : Math.max(0, currentIndex - 1);
+            if (nextIndex === currentIndex) return;
+
+            event.preventDefault();
+            const nextId = currentIds[nextIndex];
+            selectManualOrderItem(nextId);
+            const nextItem = manualOrderList.querySelector(`.manual-order-item[data-id="${nextId}"]`);
+            if (nextItem) {
+              nextItem.focus();
+            }
+          });
 
           item.addEventListener("dragstart", (event) => {
             draggingId = id;
@@ -798,6 +1059,8 @@
 
           manualOrderList.appendChild(item);
         });
+
+        applyManualSelectionState();
       };
 
       const collectFilteredProblemIds = () => {
@@ -898,10 +1161,12 @@
       if (clearManualOrderBtn) {
         clearManualOrderBtn.addEventListener("click", () => {
           syncManualInput([]);
+          selectedManualOrderId = "";
           renderManualOrderList([]);
         });
       }
 
+      setPreviewEmpty(defaultPreviewMessage);
       renderManualOrderList(uniqueIds(parseIds(manualOrderIdsInput ? manualOrderIdsInput.value : "")));
 
     })();
