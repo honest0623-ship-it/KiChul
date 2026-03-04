@@ -1,8 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-from dataclasses import asdict
 import fnmatch
-from hashlib import sha1
 import os
 from pathlib import Path
 import re
@@ -10,22 +8,7 @@ import subprocess
 import sys
 from typing import Any, Dict, List
 
-from flask import Flask, flash, redirect, render_template, request, session, url_for
-
-from ingest_pipeline import (
-    IngestConfig,
-    build_candidates,
-    detect_ocr_ready,
-    ingest_images,
-)
-from gemini_solver import list_gemini_models, ranked_gemini_models
-from groq_solver import (
-    DEFAULT_GROQ_MODEL,
-    DEPRECATED_GROQ_MODELS,
-    list_groq_models,
-    ranked_groq_models,
-)
-from openai_solver import list_openai_models, ranked_openai_models
+from flask import Flask, flash, redirect, render_template, request, url_for
 from parser import parse_problem_file
 from unit_taxonomy import (
     LEAF_PATHS,
@@ -38,16 +21,14 @@ from unit_taxonomy import (
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_ORIGINAL_DIR = BASE_DIR / "db" / "original"
 DB_PROBLEMS_DIR = BASE_DIR / "db" / "problems"
 OUTPUT_DIR = BASE_DIR / "output"
-SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 PROBLEM_ID_RE = re.compile(
     r"^(?P<school>[^-]+)-(?P<year>\d{4})-G(?P<grade>\d+)-S(?P<semester>\d+)-(?P<exam>[^-]+)-(?P<number>\d{3})$"
 )
-SOURCE_NO_TAG_RE = re.compile(r"출제번호-(\d+)")
+SOURCE_NO_TAG_RE = re.compile(r"異쒖젣踰덊샇-(\d+)")
 DEFAULT_OBJECTIVE_SOURCE_NUMBERS = [str(num) for num in range(1, 21)]
-DEFAULT_SUBJECTIVE_SOURCE_NUMBERS = [f"서답{num}" for num in range(1, 7)]
+DEFAULT_SUBJECTIVE_SOURCE_NUMBERS = [f"SUB{num}" for num in range(1, 7)]
 DEFAULT_SOURCE_LABELS = [*DEFAULT_OBJECTIVE_SOURCE_NUMBERS, *DEFAULT_SUBJECTIVE_SOURCE_NUMBERS]
 
 DEFAULTS = {
@@ -56,45 +37,12 @@ DEFAULTS = {
     "grade": "1",
     "semester": "1",
     "exam": "MID",
-    "subjective_offset": "100",
-    "ocr_lang": "kor+eng",
-    "ai_provider": "gemini",
-    "gemini_model": "gemini-2.5-flash",
-    "groq_model": DEFAULT_GROQ_MODEL,
-    "openai_model": "gpt-4.1",
-    "use_ai_solver": "1",
-    "use_ocr": "1",
-    "allow_ocr_fallback_if_ai_fails": "0",
-    "overwrite_problem_md": "0",
-    "include_original_preview_in_q": "0",
-    "copy_to_scan_png": "0",
-    "move_after_ingest": "1",
 }
 SORT_FIELDS = {"default", "unit", "school", "year", "manual"}
 SORT_ORDERS = {"asc", "desc"}
 
 app = Flask(__name__)
 app.secret_key = "math_kichul_local_admin"
-
-
-def _file_key(filename: str) -> str:
-    return sha1(filename.encode("utf-8")).hexdigest()[:12]
-
-
-def _safe_uploaded_name(raw_name: str) -> str:
-    name = Path(raw_name or "").name.strip()
-    return name.replace("\\", "_").replace("/", "_")
-
-
-def _resolve_unique_path(path: Path) -> Path:
-    if not path.exists():
-        return path
-    index = 2
-    while True:
-        candidate = path.with_name(f"{path.stem}_{index}{path.suffix}")
-        if not candidate.exists():
-            return candidate
-        index += 1
 
 
 def _resolve_unique_pdf_path(path: Path) -> Path:
@@ -169,25 +117,25 @@ def _fallback_source_no(folder_number: str, front_matter: Dict[str, Any]) -> str
     if not folder_number.isdigit():
         return ""
     number = int(folder_number)
-    qtype = str(front_matter.get("type", "")).strip()
+    qtype = str(front_matter.get("type", "")).strip().lower()
 
     # Legacy fallback for subjective numbering (e.g. 101 -> source no 1).
-    if 100 <= number < 200 and "객관식" not in qtype:
+    if 100 <= number < 200 and "objective" not in qtype:
         return str(number - 100)
     return str(number)
 
 
 def _extract_source_kind(front_matter: Dict[str, Any], folder_number: str) -> str:
     raw_kind = str(front_matter.get("source_question_kind", "")).strip().lower()
-    if raw_kind in {"objective", "객관식"}:
+    if raw_kind in {"objective", "obj", "multiple"}:
         return "objective"
-    if raw_kind in {"subjective", "서답형", "단답형", "서술형"}:
+    if raw_kind in {"subjective", "subj", "essay"}:
         return "subjective"
 
-    qtype = str(front_matter.get("type", "")).strip()
-    if "객관" in qtype:
+    qtype = str(front_matter.get("type", "")).strip().lower()
+    if any(token in qtype for token in ("objective", "multiple", "choice")):
         return "objective"
-    if any(token in qtype for token in ("서답", "단답", "서술")):
+    if any(token in qtype for token in ("subjective", "essay", "short answer")):
         return "subjective"
 
     if folder_number.isdigit() and int(folder_number) >= 100:
@@ -200,14 +148,14 @@ def _build_source_label(source_no: str, source_kind: str) -> str:
     if not token:
         return ""
     if source_kind == "subjective":
-        return f"서답{token}"
+        return f"SUB{token}"
     return token
 
 
 def _sort_source_labels(values: List[str]) -> List[str]:
     def key(item: str) -> tuple[int, int, str]:
         label = item.strip()
-        subjective = label.startswith("서답")
+        subjective = label.upper().startswith("SUB")
         number_text = re.sub(r"[^0-9]", "", label)
         number = int(number_text) if number_text.isdigit() else 9999
         return (1 if subjective else 0, number, label)
@@ -448,93 +396,18 @@ def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) ->
     }
 
 
-def _resolve_gemini_api_key(raw_value: str) -> str:
-    typed = (raw_value or "").strip()
-    if typed:
-        return typed
-    return os.environ.get("GEMINI_API_KEY", "").strip()
-
-
-def _resolve_groq_api_key(raw_value: str) -> str:
-    typed = (raw_value or "").strip()
-    if typed:
-        return typed
-    return os.environ.get("GROQ_API_KEY", "").strip()
-
-
-def _resolve_openai_api_key(raw_value: str) -> str:
-    typed = (raw_value or "").strip()
-    if typed:
-        return typed
-    return os.environ.get("OPENAI_API_KEY", "").strip()
-
-
 @app.get("/")
 def index():
     defaults = _current_defaults()
-    ai_provider = (defaults.get("ai_provider", "gemini").strip().lower() or "gemini")
-    if ai_provider not in {"gemini", "groq", "openai"}:
-        ai_provider = "gemini"
-
-    gemini_models = session.get("gemini_models")
-    if not isinstance(gemini_models, list) or not gemini_models:
-        gemini_models = ranked_gemini_models()
-    selected_gemini_model = (
-        defaults.get("gemini_model", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
-    )
-    if selected_gemini_model not in gemini_models:
-        gemini_models = [selected_gemini_model, *[item for item in gemini_models if item != selected_gemini_model]]
-
-    groq_models = session.get("groq_models")
-    if not isinstance(groq_models, list) or not groq_models:
-        groq_models = ranked_groq_models()
-    selected_groq_model = (
-        defaults.get("groq_model", DEFAULT_GROQ_MODEL).strip()
-        or DEFAULT_GROQ_MODEL
-    )
-    if selected_groq_model in DEPRECATED_GROQ_MODELS:
-        selected_groq_model = DEFAULT_GROQ_MODEL
-    if selected_groq_model not in groq_models:
-        groq_models = [selected_groq_model, *[item for item in groq_models if item != selected_groq_model]]
-
-    openai_models = session.get("openai_models")
-    if not isinstance(openai_models, list) or not openai_models:
-        openai_models = ranked_openai_models()
-    selected_openai_model = (
-        defaults.get("openai_model", "gpt-4.1").strip() or "gpt-4.1"
-    )
-    if selected_openai_model not in openai_models:
-        openai_models = [selected_openai_model, *[item for item in openai_models if item != selected_openai_model]]
-
-    subjective_offset = _parse_int(defaults.get("subjective_offset", "100"), 100)
-    candidates = build_candidates(DB_ORIGINAL_DIR, subjective_offset=subjective_offset)
-    candidate_rows = []
-    for item in candidates:
-        row = asdict(item)
-        row["key"] = _file_key(item.filename)
-        candidate_rows.append(row)
-
     problem_meta = _scan_problem_meta()
     pdf_options = _build_pdf_filter_options(problem_meta)
     pdf_selected = _read_pdf_selected(defaults, pdf_options)
-
-    ocr_ready, ocr_message = detect_ocr_ready()
     return render_template(
         "admin.html",
-        defaults=defaults,
-        ai_provider=ai_provider,
-        candidates=candidate_rows,
-        gemini_models=gemini_models,
-        groq_models=groq_models,
-        openai_models=openai_models,
         pdf_options=pdf_options,
         pdf_selected=pdf_selected,
         problem_meta=problem_meta,
-        original_dir=DB_ORIGINAL_DIR,
-        problems_dir=DB_PROBLEMS_DIR,
         output_dir=OUTPUT_DIR,
-        ocr_ready=ocr_ready,
-        ocr_message=ocr_message,
     )
 
 
@@ -548,250 +421,10 @@ def open_output_folder():
             subprocess.Popen(["open", str(OUTPUT_DIR)], cwd=str(BASE_DIR))
         else:
             subprocess.Popen(["xdg-open", str(OUTPUT_DIR)], cwd=str(BASE_DIR))
-        flash(f"출력 폴더를 열었습니다: {OUTPUT_DIR}", "success")
+        flash(f"異쒕젰 ?대뜑瑜??댁뿀?듬땲?? {OUTPUT_DIR}", "success")
     except Exception as exc:  # pylint: disable=broad-except
-        flash(f"출력 폴더 열기 실패: {exc}", "warning")
+        flash(f"異쒕젰 ?대뜑 ?닿린 ?ㅽ뙣: {exc}", "warning")
     return redirect(url_for("index", **_current_defaults()))
-
-
-@app.post("/upload")
-def upload_images():
-    DB_ORIGINAL_DIR.mkdir(parents=True, exist_ok=True)
-    files = request.files.getlist("images")
-    if not files:
-        flash("업로드할 파일이 없습니다.", "error")
-        return redirect(url_for("index", **_current_defaults()))
-
-    saved = 0
-    skipped = 0
-    for item in files:
-        filename = _safe_uploaded_name(item.filename)
-        if not filename:
-            skipped += 1
-            continue
-        extension = Path(filename).suffix.lower()
-        if extension not in SUPPORTED_EXTENSIONS:
-            skipped += 1
-            continue
-        destination = _resolve_unique_path(DB_ORIGINAL_DIR / filename)
-        item.save(destination)
-        saved += 1
-
-    flash(f"업로드 완료: 저장 {saved}개 / 제외 {skipped}개", "success")
-    return redirect(url_for("index", **_current_defaults()))
-
-
-@app.post("/ingest")
-def ingest():
-    defaults = _current_defaults()
-    action = request.form.get("action", "ingest")
-    school = request.form.get("school", defaults["school"]).strip().upper()
-    year = _parse_int(request.form.get("year", defaults["year"]), 2025)
-    grade = _parse_int(request.form.get("grade", defaults["grade"]), 1)
-    semester = _parse_int(request.form.get("semester", defaults["semester"]), 1)
-    exam = request.form.get("exam", defaults["exam"]).strip().upper() or "MID"
-    use_ocr = bool(request.form.get("use_ocr"))
-    use_ai_solver = bool(request.form.get("use_ai_solver"))
-    allow_ocr_fallback_if_ai_fails = bool(request.form.get("allow_ocr_fallback_if_ai_fails"))
-    ai_provider = (request.form.get("ai_provider", defaults.get("ai_provider", "gemini"))).strip().lower() or "gemini"
-    if ai_provider not in {"gemini", "groq", "openai"}:
-        ai_provider = "gemini"
-    overwrite_problem_md = bool(request.form.get("overwrite_problem_md"))
-    include_original_preview_in_q = bool(request.form.get("include_original_preview_in_q"))
-    copy_to_scan_png = bool(request.form.get("copy_to_scan_png"))
-    move_after_ingest = bool(request.form.get("move_after_ingest"))
-    gemini_api_key = _resolve_gemini_api_key(request.form.get("gemini_api_key", ""))
-    groq_api_key = _resolve_groq_api_key(request.form.get("groq_api_key", ""))
-    openai_api_key = _resolve_openai_api_key(request.form.get("openai_api_key", ""))
-    gemini_model = (
-        request.form.get("gemini_model", defaults.get("gemini_model", "gemini-2.5-flash")).strip()
-        or "gemini-2.5-flash"
-    )
-    groq_model = (
-        request.form.get("groq_model", defaults.get("groq_model", DEFAULT_GROQ_MODEL)).strip()
-        or DEFAULT_GROQ_MODEL
-    )
-    openai_model = (
-        request.form.get("openai_model", defaults.get("openai_model", "gpt-4.1")).strip()
-        or "gpt-4.1"
-    )
-    if groq_model in DEPRECATED_GROQ_MODELS:
-        groq_model = DEFAULT_GROQ_MODEL
-        flash("선택한 Groq 모델은 지원 종료되어 기본 모델로 자동 전환했습니다.", "warning")
-    subjective_offset = _parse_int(
-        request.form.get("subjective_offset", defaults["subjective_offset"]), 100
-    )
-    ocr_lang = request.form.get("ocr_lang", defaults["ocr_lang"]).strip() or "kor+eng"
-
-    next_defaults = {
-        "school": school,
-        "year": str(year),
-        "grade": str(grade),
-        "semester": str(semester),
-        "exam": exam,
-        "subjective_offset": str(subjective_offset),
-        "ocr_lang": ocr_lang,
-        "ai_provider": ai_provider,
-        "gemini_model": gemini_model,
-        "groq_model": groq_model,
-        "openai_model": openai_model,
-        "use_ai_solver": "1" if use_ai_solver else "0",
-        "use_ocr": "1" if use_ocr else "0",
-        "allow_ocr_fallback_if_ai_fails": "1" if allow_ocr_fallback_if_ai_fails else "0",
-        "overwrite_problem_md": "1" if overwrite_problem_md else "0",
-        "include_original_preview_in_q": "1" if include_original_preview_in_q else "0",
-        "copy_to_scan_png": "1" if copy_to_scan_png else "0",
-        "move_after_ingest": "1" if move_after_ingest else "0",
-    }
-
-    if action == "refresh_models":
-        if ai_provider == "groq":
-            if not groq_api_key:
-                flash("Groq API 키를 입력하거나 GROQ_API_KEY 환경변수를 설정한 뒤 다시 시도하세요.", "warning")
-                return redirect(url_for("index", **next_defaults))
-            models, error = list_groq_models(groq_api_key)
-            session_key = "groq_models"
-            selected_model = groq_model
-            model_key = "groq_model"
-            provider_label = "Groq"
-        elif ai_provider == "openai":
-            if not openai_api_key:
-                flash("OpenAI API 키를 입력하거나 OPENAI_API_KEY 환경변수를 설정한 뒤 다시 시도하세요.", "warning")
-                return redirect(url_for("index", **next_defaults))
-            models, error = list_openai_models(openai_api_key)
-            session_key = "openai_models"
-            selected_model = openai_model
-            model_key = "openai_model"
-            provider_label = "OpenAI"
-        else:
-            if not gemini_api_key:
-                flash("Gemini API 키를 입력하거나 GEMINI_API_KEY 환경변수를 설정한 뒤 다시 시도하세요.", "warning")
-                return redirect(url_for("index", **next_defaults))
-            models, error = list_gemini_models(gemini_api_key)
-            session_key = "gemini_models"
-            selected_model = gemini_model
-            model_key = "gemini_model"
-            provider_label = "Gemini"
-
-        if error:
-            flash(f"모델 목록 갱신 실패: {error}", "warning")
-            return redirect(url_for("index", **next_defaults))
-        session[session_key] = models
-        if selected_model not in models and models:
-            next_defaults[model_key] = models[0]
-        flash(f"{provider_label} 모델 {len(models)}개를 불러왔습니다.", "success")
-        return redirect(url_for("index", **next_defaults))
-
-    selected_filenames = request.form.getlist("selected")
-    if action == "delete_selected":
-        if not selected_filenames:
-            flash("삭제할 항목이 선택되지 않았습니다.", "warning")
-            return redirect(url_for("index", **next_defaults))
-
-        deleted = 0
-        missing = 0
-        for filename in selected_filenames:
-            target = DB_ORIGINAL_DIR / Path(filename).name
-            if target.exists() and target.is_file():
-                try:
-                    target.unlink()
-                    deleted += 1
-                except OSError:
-                    missing += 1
-            else:
-                missing += 1
-
-        flash(f"선택 업로드 파일 삭제: 삭제 {deleted}개, 제외 {missing}개", "success")
-        return redirect(url_for("index", **next_defaults))
-
-    if not selected_filenames:
-        flash("선택된 이미지가 없습니다. 표에서 최소 1개를 선택하세요.", "warning")
-        return redirect(url_for("index", **next_defaults))
-
-    overrides: Dict[str, int] = {}
-    for key, value in request.form.items():
-        if not key.startswith("num_for_"):
-            continue
-        digest = key.removeprefix("num_for_")
-        filename = request.form.get(f"file_for_{digest}", "").strip()
-        if not filename:
-            continue
-        raw = value.strip()
-        if not raw:
-            continue
-        try:
-            overrides[filename] = int(raw)
-        except ValueError:
-            continue
-
-    config = IngestConfig(
-        school=school,
-        year=year,
-        grade=grade,
-        semester=semester,
-        exam=exam,
-        source_label=request.form.get("source_label", "").strip(),
-        subjective_offset=subjective_offset,
-        overwrite_problem_md=overwrite_problem_md,
-        include_original_preview_in_q=include_original_preview_in_q,
-        copy_to_scan_png=copy_to_scan_png,
-        use_ocr=use_ocr,
-        ocr_lang=ocr_lang,
-        use_ai_solver=use_ai_solver,
-        ai_provider=ai_provider,
-        gemini_api_key=gemini_api_key,
-        gemini_model=gemini_model,
-        groq_api_key=groq_api_key,
-        groq_model=groq_model,
-        openai_api_key=openai_api_key,
-        openai_model=openai_model,
-        allow_ocr_fallback_if_ai_fails=allow_ocr_fallback_if_ai_fails,
-        move_after_ingest=move_after_ingest,
-    )
-
-    results, warnings = ingest_images(
-        original_dir=DB_ORIGINAL_DIR,
-        problems_root=DB_PROBLEMS_DIR,
-        config=config,
-        selected_filenames=selected_filenames,
-        overrides=overrides,
-    )
-
-    created = len([item for item in results if item.status == "created"])
-    updated = len([item for item in results if item.status == "updated"])
-    skipped = len([item for item in results if item.status == "skipped"])
-
-    flash(
-        f"DB 처리 완료: 생성 {created}, 갱신 {updated}, 스킵 {skipped}, 경고 {len(warnings)}",
-        "success",
-    )
-
-    for warning in warnings[:15]:
-        flash(warning, "warning")
-
-    for item in results[:20]:
-        flash(
-            f"{item.filename} -> {item.problem_id} ({item.status}) | {item.message}",
-            "info",
-        )
-
-    next_defaults["ocr_lang"] = config.ocr_lang
-    next_defaults["ai_provider"] = config.ai_provider
-    next_defaults["gemini_model"] = config.gemini_model
-    next_defaults["groq_model"] = config.groq_model
-    next_defaults["openai_model"] = config.openai_model
-    next_defaults["use_ai_solver"] = "1" if config.use_ai_solver else "0"
-    next_defaults["use_ocr"] = "1" if config.use_ocr else "0"
-    next_defaults["allow_ocr_fallback_if_ai_fails"] = (
-        "1" if config.allow_ocr_fallback_if_ai_fails else "0"
-    )
-    next_defaults["overwrite_problem_md"] = "1" if config.overwrite_problem_md else "0"
-    next_defaults["include_original_preview_in_q"] = (
-        "1" if config.include_original_preview_in_q else "0"
-    )
-    next_defaults["copy_to_scan_png"] = "1" if config.copy_to_scan_png else "0"
-    next_defaults["move_after_ingest"] = "1" if config.move_after_ingest else "0"
-    return redirect(url_for("index", **next_defaults))
 
 
 @app.post("/render")
@@ -832,7 +465,7 @@ def render_pdf():
         selected_problem_ids = [item for item in selector_ids if item in available_ids]
         missing_ids = [item for item in selector_ids if item not in available_ids]
         if missing_ids:
-            flash(f"존재하지 않는 ID 제외: {', '.join(missing_ids[:10])}", "warning")
+            flash(f"議댁옱?섏? ?딅뒗 ID ?쒖쇅: {', '.join(missing_ids[:10])}", "warning")
     else:
         for item in problem_meta:
             if schools and item["school"] not in schools:
@@ -863,9 +496,9 @@ def render_pdf():
             manual_order_ids=manual_reference_ids,
         )
         if not manual_reference_ids:
-            flash("수동 정렬 기준(ID 목록)이 비어 있어 현재 선택 순서를 유지합니다.", "warning")
+            flash("?섎룞 ?뺣젹 湲곗?(ID 紐⑸줉)??鍮꾩뼱 ?덉뼱 ?꾩옱 ?좏깮 ?쒖꽌瑜??좎??⑸땲??", "warning")
         if missing_manual_ids:
-            flash(f"수동 정렬 목록에서 제외된 ID: {', '.join(missing_manual_ids[:10])}", "warning")
+            flash(f"?섎룞 ?뺣젹 紐⑸줉?먯꽌 ?쒖쇅??ID: {', '.join(missing_manual_ids[:10])}", "warning")
     else:
         selected_problem_ids = _sort_selected_problem_ids(
             selected_problem_ids=selected_problem_ids,
@@ -878,26 +511,13 @@ def render_pdf():
         selected_problem_ids = selected_problem_ids[:question_count]
 
     if not selected_problem_ids:
-        flash("선택 조건에 해당하는 문항이 없습니다.", "warning")
+        flash("?좏깮 議곌굔???대떦?섎뒗 臾명빆???놁뒿?덈떎.", "warning")
         next_defaults = {
             "school": _first_or(schools, defaults["school"]),
             "year": _first_or(years, defaults["year"]),
             "grade": _first_or(grades, defaults["grade"]),
             "semester": _first_or(semesters, defaults["semester"]),
             "exam": _first_or(exams, defaults["exam"]),
-            "subjective_offset": defaults.get("subjective_offset", "100"),
-            "ocr_lang": defaults.get("ocr_lang", "kor+eng"),
-            "ai_provider": defaults.get("ai_provider", "gemini"),
-            "gemini_model": defaults.get("gemini_model", "gemini-2.5-flash"),
-            "groq_model": defaults.get("groq_model", DEFAULT_GROQ_MODEL),
-            "openai_model": defaults.get("openai_model", "gpt-4.1"),
-            "use_ai_solver": defaults.get("use_ai_solver", "1"),
-            "use_ocr": defaults.get("use_ocr", "1"),
-            "allow_ocr_fallback_if_ai_fails": defaults.get("allow_ocr_fallback_if_ai_fails", "0"),
-            "overwrite_problem_md": defaults.get("overwrite_problem_md", "0"),
-            "include_original_preview_in_q": defaults.get("include_original_preview_in_q", "0"),
-            "copy_to_scan_png": defaults.get("copy_to_scan_png", "0"),
-            "move_after_ingest": defaults.get("move_after_ingest", "1"),
             "schools": schools,
             "years": years,
             "grades": grades,
@@ -983,7 +603,7 @@ def render_pdf():
     )
 
     if completed.returncode != 0:
-        flash("PDF 생성 실패", "error")
+        flash("PDF ?앹꽦 ?ㅽ뙣", "error")
         if completed.stderr.strip():
             for line in completed.stderr.strip().splitlines()[:20]:
                 flash(line, "warning")
@@ -991,10 +611,10 @@ def render_pdf():
             for line in completed.stdout.strip().splitlines()[:20]:
                 flash(line, "info")
     else:
-        flash(f"PDF 생성 완료: {out_path}", "success")
-        flash(f"출제 문항수: {len(selected_problem_ids)}", "info")
+        flash(f"PDF ?앹꽦 ?꾨즺: {out_path}", "success")
+        flash(f"異쒖젣 臾명빆?? {len(selected_problem_ids)}", "info")
         if append_answer_sheet or append_solution_sheet:
-            flash("체크된 답안지/해설지가 시험지 뒤에 병합된 단일 PDF로 생성되었습니다.", "info")
+            flash("泥댄겕???듭븞吏/?댁꽕吏媛 ?쒗뿕吏 ?ㅼ뿉 蹂묓빀???⑥씪 PDF濡??앹꽦?섏뿀?듬땲??", "info")
         if completed.stdout.strip():
             for line in completed.stdout.strip().splitlines()[:20]:
                 flash(line, "info")
@@ -1008,19 +628,6 @@ def render_pdf():
         "grade": _first_or(grades, defaults["grade"]),
         "semester": _first_or(semesters, defaults["semester"]),
         "exam": _first_or(exams, defaults["exam"]),
-        "subjective_offset": defaults.get("subjective_offset", "100"),
-        "ocr_lang": defaults.get("ocr_lang", "kor+eng"),
-        "ai_provider": defaults.get("ai_provider", "gemini"),
-        "gemini_model": defaults.get("gemini_model", "gemini-2.5-flash"),
-        "groq_model": defaults.get("groq_model", DEFAULT_GROQ_MODEL),
-        "openai_model": defaults.get("openai_model", "gpt-4.1"),
-        "use_ai_solver": defaults.get("use_ai_solver", "1"),
-        "use_ocr": defaults.get("use_ocr", "1"),
-        "allow_ocr_fallback_if_ai_fails": defaults.get("allow_ocr_fallback_if_ai_fails", "0"),
-        "overwrite_problem_md": defaults.get("overwrite_problem_md", "0"),
-        "include_original_preview_in_q": defaults.get("include_original_preview_in_q", "0"),
-        "copy_to_scan_png": defaults.get("copy_to_scan_png", "0"),
-        "move_after_ingest": defaults.get("move_after_ingest", "1"),
         "schools": schools,
         "years": years,
         "grades": grades,

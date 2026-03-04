@@ -27,52 +27,6 @@
       margin: 0 0 6px;
       font-size: 18px;
     }
-    .card-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .card-head h2 {
-      margin: 0;
-    }
-    .fold-btn {
-      border: 1px solid #c3cdd8;
-      background: #fff;
-      color: #334155;
-      width: 30px;
-      height: 30px;
-      border-radius: 8px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      font-size: 18px;
-      font-weight: 700;
-      line-height: 1;
-      transform: rotate(-90deg);
-      transition: transform 0.18s ease, background-color 0.15s ease;
-    }
-    .fold-btn:hover {
-      background: #eef4fb;
-    }
-    .fold-btn.is-open {
-      transform: rotate(0deg);
-    }
-    .fold-body {
-      margin-top: 8px;
-    }
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      border: 0;
-      white-space: nowrap;
-    }
     .top-row {
       display: flex;
       justify-content: space-between;
@@ -313,7 +267,7 @@
       <div class="top-row">
         <div>
           <h2>Math DB Admin</h2>
-          <p class="muted">이미지 업로드, DB 생성, PDF 출력을 웹에서 처리합니다.</p>
+          <p class="muted">문항 DB를 선택해 시험지/답안지/해설지 PDF를 생성합니다.</p>
         </div>
         <div class="top-actions">
           <a class="btn secondary" href="/open-output">Output 폴더 열기</a>
@@ -331,158 +285,9 @@
       {% endif %}
     {% endwith %}
 
-    <section class="card">
-      <div class="card-head">
-        <h2>1) 이미지 업로드</h2>
-        <button
-          class="fold-btn js-toggle-card"
-          type="button"
-          data-target-id="panel-upload"
-          aria-controls="panel-upload"
-          aria-expanded="false"
-          title="펼치기/접기"
-        ><span aria-hidden="true">&lt;</span><span class="sr-only">이미지 업로드 패널 펼치기/접기</span></button>
-      </div>
-      <div id="panel-upload" class="fold-body" hidden>
-        <p class="path-line">Staging: {{ original_dir }}</p>
-        <form method="post" action="/upload" enctype="multipart/form-data">
-          <label for="images">이미지 파일 (복수 선택)</label>
-          <input id="images" type="file" name="images" accept=".png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff" multiple required />
-          <div class="inline">
-            <button class="btn" type="submit">업로드</button>
-          </div>
-        </form>
-      </div>
-    </section>
 
     <section class="card">
-      <h2>OCR 상태</h2>
-      <p class="path-line">{{ ocr_message }}</p>
-      {% if not ocr_ready %}
-        <p class="muted">OCR 사용 시 `pip install Pillow pytesseract` + Tesseract 설치가 필요합니다.</p>
-      {% endif %}
-    </section>
-
-    <section class="card">
-      <div class="card-head">
-        <h2>2) DB 자동 생성</h2>
-        <button
-          class="fold-btn js-toggle-card"
-          type="button"
-          data-target-id="panel-ingest"
-          aria-controls="panel-ingest"
-          aria-expanded="false"
-          title="펼치기/접기"
-        ><span aria-hidden="true">&lt;</span><span class="sr-only">DB 자동 생성 패널 펼치기/접기</span></button>
-      </div>
-      <div id="panel-ingest" class="fold-body" hidden>
-      <p class="path-line">Problems Root: {{ problems_dir }}</p>
-      <form method="post" action="/ingest">
-        <div class="meta-grid">
-          <div><label for="school">School</label><input id="school" type="text" name="school" value="{{ defaults.school }}" required /></div>
-          <div><label for="year">Year</label><input id="year" type="number" name="year" value="{{ defaults.year }}" required /></div>
-          <div><label for="grade">Grade</label><input id="grade" type="number" name="grade" value="{{ defaults.grade }}" required /></div>
-          <div><label for="semester">Semester</label><input id="semester" type="number" name="semester" value="{{ defaults.semester }}" required /></div>
-          <div><label for="exam">Exam</label><input id="exam" type="text" name="exam" value="{{ defaults.exam }}" required /></div>
-          <div><label for="subjective_offset">서답형 오프셋</label><input id="subjective_offset" type="number" name="subjective_offset" value="{{ defaults.subjective_offset }}" /></div>
-        </div>
-
-        <div class="form-grid">
-          <div><label for="source_label">Source Label</label><input id="source_label" type="text" name="source_label" placeholder="예: web_upload_2026-02-27" /></div>
-          <div><label for="ocr_lang">OCR 언어</label><input id="ocr_lang" type="text" name="ocr_lang" value="{{ defaults.ocr_lang }}" /></div>
-          <div>
-            <label for="ai_provider">AI Provider</label>
-            <select id="ai_provider" name="ai_provider">
-              <option value="gemini" {% if ai_provider == "gemini" %}selected{% endif %}>Gemini</option>
-              <option value="groq" {% if ai_provider == "groq" %}selected{% endif %}>Groq</option>
-              <option value="openai" {% if ai_provider == "openai" %}selected{% endif %}>OpenAI</option>
-            </select>
-          </div>
-          <div></div>
-          <div><label for="gemini_api_key">Gemini API Key</label><input id="gemini_api_key" type="password" name="gemini_api_key" autocomplete="off" /></div>
-          <div>
-            <label for="gemini_model">Gemini 모델</label>
-            <select id="gemini_model" name="gemini_model">
-              {% for model in gemini_models %}
-                <option value="{{ model }}" {% if model == defaults.gemini_model %}selected{% endif %}>{{ model }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div><label for="groq_api_key">Groq API Key</label><input id="groq_api_key" type="password" name="groq_api_key" autocomplete="off" /></div>
-          <div>
-            <label for="groq_model">Groq 모델</label>
-            <select id="groq_model" name="groq_model">
-              {% for model in groq_models %}
-                <option value="{{ model }}" {% if model == defaults.groq_model %}selected{% endif %}>{{ model }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div><label for="openai_api_key">OpenAI API Key</label><input id="openai_api_key" type="password" name="openai_api_key" autocomplete="off" /></div>
-          <div>
-            <label for="openai_model">OpenAI 모델</label>
-            <select id="openai_model" name="openai_model">
-              {% for model in openai_models %}
-                <option value="{{ model }}" {% if model == defaults.openai_model %}selected{% endif %}>{{ model }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-
-        <div class="inline">
-          <label><input type="checkbox" name="use_ai_solver" {% if defaults.use_ai_solver != "0" %}checked{% endif %} /> AI 자동 풀이</label>
-          <label><input type="checkbox" name="use_ocr" {% if defaults.use_ocr != "0" %}checked{% endif %} /> OCR 사용</label>
-          <label><input type="checkbox" name="allow_ocr_fallback_if_ai_fails" {% if defaults.allow_ocr_fallback_if_ai_fails != "0" %}checked{% endif %} /> AI 실패 시 OCR 대체</label>
-          <label><input type="checkbox" name="overwrite_problem_md" {% if defaults.overwrite_problem_md != "0" %}checked{% endif %} /> 기존 problem.md 덮어쓰기</label>
-          <label><input type="checkbox" name="include_original_preview_in_q" {% if defaults.include_original_preview_in_q != "0" %}checked{% endif %} /> Q에 원본 이미지 링크 삽입</label>
-          <label><input type="checkbox" name="copy_to_scan_png" {% if defaults.copy_to_scan_png != "0" %}checked{% endif %} /> 업로드 이미지를 scan.png로 복사</label>
-          <label><input type="checkbox" name="move_after_ingest" {% if defaults.move_after_ingest != "0" %}checked{% endif %} /> 처리 후 db/original 파일 삭제</label>
-        </div>
-
-        {% if candidates %}
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>선택</th>
-                  <th>파일명</th>
-                  <th>출제번호</th>
-                  <th>DB번호(수정)</th>
-                  <th>유형</th>
-                  <th>감지 메모</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in candidates %}
-                  <tr>
-                    <td>
-                      <input type="checkbox" name="selected" value="{{ row.filename }}" checked />
-                      <input type="hidden" name="file_for_{{ row.key }}" value="{{ row.filename }}" />
-                    </td>
-                    <td>{{ row.filename }}</td>
-                    <td>{{ row.source_question_no if row.source_question_no is not none else "-" }}</td>
-                    <td><input type="number" name="num_for_{{ row.key }}" value="{{ row.detected_problem_no if row.detected_problem_no is not none else '' }}" style="width: 120px;" /></td>
-                    <td>{{ row.qtype }}</td>
-                    <td>{{ row.detection_note }}</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% else %}
-          <div class="empty">`db/original`에 이미지가 없습니다. 먼저 업로드하세요.</div>
-        {% endif %}
-
-        <div class="inline">
-          <button class="btn" type="submit" name="action" value="ingest">선택 이미지 DB 반영</button>
-          <button class="btn secondary" type="submit" name="action" value="delete_selected" formnovalidate>선택 항목 삭제</button>
-          <button class="btn secondary" type="submit" name="action" value="refresh_models" formnovalidate>선택 AI 모델 목록 갱신</button>
-        </div>
-      </form>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>3) PDF 출력</h2>
+      <h2>PDF 출력</h2>
       <p class="path-line">Output: {{ output_dir }}</p>
       <form method="post" action="/render">
         <div class="meta-grid">
@@ -1099,22 +904,6 @@
 
       renderManualOrderList(uniqueIds(parseIds(manualOrderIdsInput ? manualOrderIdsInput.value : "")));
 
-      const toggleCard = (button) => {
-        const targetId = button.dataset.targetId;
-        if (!targetId) return;
-        const panel = document.getElementById(targetId);
-        if (!panel) return;
-
-        const expanded = button.getAttribute("aria-expanded") === "true";
-        const nextExpanded = !expanded;
-        button.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
-        button.classList.toggle("is-open", nextExpanded);
-        panel.hidden = !nextExpanded;
-      };
-
-      document.querySelectorAll(".js-toggle-card").forEach((btn) => {
-        btn.addEventListener("click", () => toggleCard(btn));
-      });
     })();
   </script>
 </body>

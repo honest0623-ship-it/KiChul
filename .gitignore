@@ -5,7 +5,3 @@ __pycache__/
 
 # Local output artifacts
 output/
-
-# Workflow runtime files
-scripts/.db_workflow_state.json
-scripts/DB_WORKFLOW_PLAN.md

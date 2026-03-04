@@ -394,20 +394,7 @@ def _build_source_info(problem: ParsedProblem) -> str:
     exam = str(front.get("exam") or from_id.get("exam") or "").strip().upper()
     source_label = _extract_source_question_label(front, str(from_id.get("number", "")))
 
-    unit_l1 = str(front.get("unit_l1") or "").strip()
-    unit_l2 = str(front.get("unit_l2") or "").strip()
-    unit_l3 = str(front.get("unit_l3") or "").strip()
-    unit_path = ""
-    if unit_l1 and unit_l2 and unit_l3:
-        unit_path = ">".join([CURRICULUM_SUFFIX_RE.sub("", unit_l1).strip(), unit_l2, unit_l3])
-    else:
-        raw_unit = str(front.get("unit") or "").strip()
-        if raw_unit:
-            unit_parts = [token.strip() for token in raw_unit.split(">") if token.strip()]
-            if unit_parts:
-                if unit_parts:
-                    unit_parts[0] = CURRICULUM_SUFFIX_RE.sub("", unit_parts[0]).strip()
-                unit_path = ">".join(unit_parts)
+    unit_path = _extract_unit_path(front).replace(" > ", ">")
 
     parts: List[str] = []
     if school:
@@ -428,18 +415,17 @@ def _build_source_info(problem: ParsedProblem) -> str:
 
 
 def _extract_unit_path(front_matter: Dict[str, object]) -> str:
-    unit_l1 = str(front_matter.get("unit_l1") or "").strip()
     unit_l2 = str(front_matter.get("unit_l2") or "").strip()
     unit_l3 = str(front_matter.get("unit_l3") or "").strip()
-    if unit_l1 and unit_l2 and unit_l3:
-        return " > ".join([CURRICULUM_SUFFIX_RE.sub("", unit_l1).strip(), unit_l2, unit_l3])
+    if unit_l2 and unit_l3:
+        return " > ".join([unit_l2, unit_l3])
 
     raw_unit = str(front_matter.get("unit") or "").strip()
     if not raw_unit:
         return ""
     unit_parts = [token.strip() for token in raw_unit.split(">") if token.strip()]
-    if unit_parts:
-        unit_parts[0] = CURRICULUM_SUFFIX_RE.sub("", unit_parts[0]).strip()
+    if len(unit_parts) >= 3:
+        return " > ".join(unit_parts[1:])
     return " > ".join(unit_parts)
 
 

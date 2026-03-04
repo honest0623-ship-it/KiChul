@@ -1,17 +1,12 @@
-# Web App Guide
+﻿# Web App Guide
 
 ## 1) Install dependencies
 
 ```powershell
 cd D:\Math_Kichul
 python -m pip install -r requirements.txt
+python -m playwright install chromium
 ```
-
-Optional OCR setup:
-
-1. Install Tesseract OCR on Windows.
-2. Make sure `tesseract` command works in terminal.
-3. Keep `Pillow` + `pytesseract` installed (`requirements.txt` already includes both).
 
 ## 2) Run app
 
@@ -26,52 +21,32 @@ Open browser:
 http://127.0.0.1:5000
 ```
 
-## 3) Workflow
+## 3) What the web app does now
 
-1. Upload images in the web page (`db/original` staging).
-2. In DB auto generation:
-   - choose `AI Provider` (`Gemini` or `Groq`)
-   - set the provider API key and model
-   - click `선택 AI 모델 목록 갱신` (refreshes models for the selected provider only)
-3. Check/adjust detected DB numbers in the table.
-4. Click `선택 이미지 DB 반영`.
-5. Optionally click `선택 항목 삭제` to remove checked staged files.
-6. Optionally generate exam/answer/solution PDFs from the same page.
+- The web app is render-only.
+- It reads existing markdown problems from `db/problems`.
+- It filters and selects problems, then generates PDF outputs.
 
-## 4) API key input (optional env vars)
+Removed from web app:
 
-You can leave key fields empty if environment variables are set:
+- image upload workflow
+- DB auto-generation (ingest) workflow
 
-- Gemini: `GEMINI_API_KEY`
-- Groq: `GROQ_API_KEY`
+## 4) Render workflow
 
-## 5) Filename rules
+1. Choose filters (school/year/grade/semester/exam/unit/level/source no).
+2. Optionally set pattern, explicit IDs, and manual order.
+3. Set output options (paper, columns, title, file names).
+4. Click `PDF 생성 실행`.
 
-- `006.png` -> problem number `006` (objective by default)
-- `서답5번.png` -> problem number `105` (subjective offset default = 100)
-- `정답006.png` (or `answer006.png`) -> answer source for problem 006
-- `해설006.png` (or `solution006.png`) -> solution source for problem 006
+## 5) Output
 
-If detection is wrong, edit the DB number in the UI before ingestion.
+- Main PDF: `output/<out_name>.pdf`
+- Optional answer sheet: `output/<answer_name>.pdf`
+- Optional solution sheet: `output/<solution_name>.pdf`
 
-## 6) OCR behavior
+## 6) CLI equivalent
 
-- If `OCR 사용` is enabled and OCR engine is unavailable (and AI is off), ingestion stops.
-- RapidOCR is used first; if unavailable, Tesseract is used as fallback.
-
-## 7) AI behavior
-
-- `AI 자동 풀이` tries to generate question/choices/answer/solution from image.
-- `AI 실패 시 OCR 대체 허용` enables OCR fallback when AI fails.
-- Gemini and Groq calls include auto retry/backoff for transient errors and `429` rate limits.
-- Groq includes request pacing by default (`GROQ_MIN_INTERVAL_SEC`, default `2.0` sec).
-- If AI returns `401` (invalid API key/auth), remaining items skip AI in that run.
-- If a selected model is decommissioned, remaining items skip AI in that run.
-  Use `선택 AI 모델 목록 갱신` and pick another model.
-- Deprecated Groq 3.2 vision model names are auto-switched to the current default model.
-
-## 8) Asset rule
-
-- `assets/scan.png`: inline figure image referenced inside Q/Choices.
-- `assets/original/`: raw source image archive.
-- Renderer ignores `assets/original/*` links by default, so full source scans do not appear in exam PDFs.
+```powershell
+python build_exam.py --root db/problems --ids HN-2025-G1-S1-MID-006,HN-2025-G1-S1-MID-008 --out output/exam_test.pdf
+```
