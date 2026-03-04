@@ -6,7 +6,7 @@ grade: 1
 semester: 1
 exam: Final
 type: 서답형(서술형)
-source_question_no: 104
+source_question_no: 4
 source_question_kind: subjective
 source_question_label: '서답4번'
 difficulty: '5'

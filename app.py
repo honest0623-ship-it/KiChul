@@ -25,6 +25,7 @@ from groq_solver import (
     list_groq_models,
     ranked_groq_models,
 )
+from openai_solver import list_openai_models, ranked_openai_models
 from parser import parse_problem_file
 from unit_taxonomy import (
     LEAF_PATHS,
@@ -60,6 +61,7 @@ DEFAULTS = {
     "ai_provider": "gemini",
     "gemini_model": "gemini-2.5-flash",
     "groq_model": DEFAULT_GROQ_MODEL,
+    "openai_model": "gpt-4.1",
     "use_ai_solver": "1",
     "use_ocr": "1",
     "allow_ocr_fallback_if_ai_fails": "0",
@@ -68,7 +70,7 @@ DEFAULTS = {
     "copy_to_scan_png": "0",
     "move_after_ingest": "1",
 }
-SORT_FIELDS = {"default", "unit", "school", "year"}
+SORT_FIELDS = {"default", "unit", "school", "year", "manual"}
 SORT_ORDERS = {"asc", "desc"}
 
 app = Flask(__name__)
@@ -335,7 +337,7 @@ def _sort_selected_problem_ids(
     if len(items) < 2:
         return items
 
-    if sort_field == "default":
+    if sort_field in {"default", "manual"}:
         if sort_order == "desc":
             items.reverse()
         return items
@@ -365,6 +367,32 @@ def _sort_selected_problem_ids(
         return (problem_id,)
 
     return sorted(items, key=_key, reverse=(sort_order == "desc"))
+
+
+def _apply_manual_order(
+    selected_problem_ids: List[str],
+    manual_order_ids: List[str],
+) -> tuple[List[str], List[str]]:
+    selected_set = set(selected_problem_ids)
+    ordered: List[str] = []
+    seen = set()
+    missing: List[str] = []
+
+    for problem_id in manual_order_ids:
+        if problem_id in selected_set:
+            if problem_id in seen:
+                continue
+            seen.add(problem_id)
+            ordered.append(problem_id)
+            continue
+        missing.append(problem_id)
+
+    for problem_id in selected_problem_ids:
+        if problem_id in seen:
+            continue
+        ordered.append(problem_id)
+
+    return ordered, missing
 
 
 def _build_pdf_filter_options(problem_meta: List[Dict[str, str]]) -> Dict[str, Any]:
@@ -406,10 +434,12 @@ def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) ->
         "source_numbers": pick_all_when_empty("source_numbers"),
         "pattern": request.args.get("selector_pattern", ""),
         "selector_ids": request.args.get("selector_ids", ""),
+        "manual_order_ids": request.args.get("manual_order_ids", ""),
         "sort_field": _normalize_sort_field(request.args.get("sort_field", "default")),
         "sort_order": _normalize_sort_order(request.args.get("sort_order", "asc")),
         "question_count": request.args.get("question_count", "0"),
         "show_source_info": request.args.get("show_source_info", "1") != "0",
+        "show_unit_info": request.args.get("show_unit_info", "1") != "0",
         "teacher_view": request.args.get("teacher_view", "0") == "1",
         "title": request.args.get(
             "title",
@@ -432,11 +462,18 @@ def _resolve_groq_api_key(raw_value: str) -> str:
     return os.environ.get("GROQ_API_KEY", "").strip()
 
 
+def _resolve_openai_api_key(raw_value: str) -> str:
+    typed = (raw_value or "").strip()
+    if typed:
+        return typed
+    return os.environ.get("OPENAI_API_KEY", "").strip()
+
+
 @app.get("/")
 def index():
     defaults = _current_defaults()
     ai_provider = (defaults.get("ai_provider", "gemini").strip().lower() or "gemini")
-    if ai_provider not in {"gemini", "groq"}:
+    if ai_provider not in {"gemini", "groq", "openai"}:
         ai_provider = "gemini"
 
     gemini_models = session.get("gemini_models")
@@ -460,6 +497,15 @@ def index():
     if selected_groq_model not in groq_models:
         groq_models = [selected_groq_model, *[item for item in groq_models if item != selected_groq_model]]
 
+    openai_models = session.get("openai_models")
+    if not isinstance(openai_models, list) or not openai_models:
+        openai_models = ranked_openai_models()
+    selected_openai_model = (
+        defaults.get("openai_model", "gpt-4.1").strip() or "gpt-4.1"
+    )
+    if selected_openai_model not in openai_models:
+        openai_models = [selected_openai_model, *[item for item in openai_models if item != selected_openai_model]]
+
     subjective_offset = _parse_int(defaults.get("subjective_offset", "100"), 100)
     candidates = build_candidates(DB_ORIGINAL_DIR, subjective_offset=subjective_offset)
     candidate_rows = []
@@ -480,8 +526,10 @@ def index():
         candidates=candidate_rows,
         gemini_models=gemini_models,
         groq_models=groq_models,
+        openai_models=openai_models,
         pdf_options=pdf_options,
         pdf_selected=pdf_selected,
+        problem_meta=problem_meta,
         original_dir=DB_ORIGINAL_DIR,
         problems_dir=DB_PROBLEMS_DIR,
         output_dir=OUTPUT_DIR,
@@ -546,7 +594,7 @@ def ingest():
     use_ai_solver = bool(request.form.get("use_ai_solver"))
     allow_ocr_fallback_if_ai_fails = bool(request.form.get("allow_ocr_fallback_if_ai_fails"))
     ai_provider = (request.form.get("ai_provider", defaults.get("ai_provider", "gemini"))).strip().lower() or "gemini"
-    if ai_provider not in {"gemini", "groq"}:
+    if ai_provider not in {"gemini", "groq", "openai"}:
         ai_provider = "gemini"
     overwrite_problem_md = bool(request.form.get("overwrite_problem_md"))
     include_original_preview_in_q = bool(request.form.get("include_original_preview_in_q"))
@@ -554,6 +602,7 @@ def ingest():
     move_after_ingest = bool(request.form.get("move_after_ingest"))
     gemini_api_key = _resolve_gemini_api_key(request.form.get("gemini_api_key", ""))
     groq_api_key = _resolve_groq_api_key(request.form.get("groq_api_key", ""))
+    openai_api_key = _resolve_openai_api_key(request.form.get("openai_api_key", ""))
     gemini_model = (
         request.form.get("gemini_model", defaults.get("gemini_model", "gemini-2.5-flash")).strip()
         or "gemini-2.5-flash"
@@ -561,6 +610,10 @@ def ingest():
     groq_model = (
         request.form.get("groq_model", defaults.get("groq_model", DEFAULT_GROQ_MODEL)).strip()
         or DEFAULT_GROQ_MODEL
+    )
+    openai_model = (
+        request.form.get("openai_model", defaults.get("openai_model", "gpt-4.1")).strip()
+        or "gpt-4.1"
     )
     if groq_model in DEPRECATED_GROQ_MODELS:
         groq_model = DEFAULT_GROQ_MODEL
@@ -581,6 +634,7 @@ def ingest():
         "ai_provider": ai_provider,
         "gemini_model": gemini_model,
         "groq_model": groq_model,
+        "openai_model": openai_model,
         "use_ai_solver": "1" if use_ai_solver else "0",
         "use_ocr": "1" if use_ocr else "0",
         "allow_ocr_fallback_if_ai_fails": "1" if allow_ocr_fallback_if_ai_fails else "0",
@@ -600,6 +654,15 @@ def ingest():
             selected_model = groq_model
             model_key = "groq_model"
             provider_label = "Groq"
+        elif ai_provider == "openai":
+            if not openai_api_key:
+                flash("OpenAI API 키를 입력하거나 OPENAI_API_KEY 환경변수를 설정한 뒤 다시 시도하세요.", "warning")
+                return redirect(url_for("index", **next_defaults))
+            models, error = list_openai_models(openai_api_key)
+            session_key = "openai_models"
+            selected_model = openai_model
+            model_key = "openai_model"
+            provider_label = "OpenAI"
         else:
             if not gemini_api_key:
                 flash("Gemini API 키를 입력하거나 GEMINI_API_KEY 환경변수를 설정한 뒤 다시 시도하세요.", "warning")
@@ -680,6 +743,8 @@ def ingest():
         gemini_model=gemini_model,
         groq_api_key=groq_api_key,
         groq_model=groq_model,
+        openai_api_key=openai_api_key,
+        openai_model=openai_model,
         allow_ocr_fallback_if_ai_fails=allow_ocr_fallback_if_ai_fails,
         move_after_ingest=move_after_ingest,
     )
@@ -714,6 +779,7 @@ def ingest():
     next_defaults["ai_provider"] = config.ai_provider
     next_defaults["gemini_model"] = config.gemini_model
     next_defaults["groq_model"] = config.groq_model
+    next_defaults["openai_model"] = config.openai_model
     next_defaults["use_ai_solver"] = "1" if config.use_ai_solver else "0"
     next_defaults["use_ocr"] = "1" if config.use_ocr else "0"
     next_defaults["allow_ocr_fallback_if_ai_fails"] = (
@@ -747,11 +813,13 @@ def render_pdf():
     source_numbers = _normalize_values(request.form.getlist("source_numbers"))
 
     selector_ids = _extract_ids(request.form.get("selector_ids", ""))
+    manual_order_ids = _extract_ids(request.form.get("manual_order_ids", ""))
     pattern = request.form.get("selector_pattern", "").strip()
     sort_field = _normalize_sort_field(request.form.get("sort_field", "default"))
     sort_order = _normalize_sort_order(request.form.get("sort_order", "asc"))
     question_count = max(_parse_int(request.form.get("question_count", "0"), 0), 0)
     show_source_info = bool(request.form.get("show_source_info"))
+    show_unit_info = bool(request.form.get("show_unit_info"))
     teacher_view = bool(request.form.get("teacher_view"))
     append_answer_sheet = bool(request.form.get("answer_sheet"))
     append_solution_sheet = bool(request.form.get("solution_sheet"))
@@ -788,12 +856,23 @@ def render_pdf():
     if pattern:
         selected_problem_ids = [item for item in selected_problem_ids if fnmatch.fnmatch(item, pattern)]
 
-    selected_problem_ids = _sort_selected_problem_ids(
-        selected_problem_ids=selected_problem_ids,
-        problem_meta=problem_meta,
-        sort_field=sort_field,
-        sort_order=sort_order,
-    )
+    if sort_field == "manual":
+        manual_reference_ids = manual_order_ids if manual_order_ids else selector_ids
+        selected_problem_ids, missing_manual_ids = _apply_manual_order(
+            selected_problem_ids=selected_problem_ids,
+            manual_order_ids=manual_reference_ids,
+        )
+        if not manual_reference_ids:
+            flash("수동 정렬 기준(ID 목록)이 비어 있어 현재 선택 순서를 유지합니다.", "warning")
+        if missing_manual_ids:
+            flash(f"수동 정렬 목록에서 제외된 ID: {', '.join(missing_manual_ids[:10])}", "warning")
+    else:
+        selected_problem_ids = _sort_selected_problem_ids(
+            selected_problem_ids=selected_problem_ids,
+            problem_meta=problem_meta,
+            sort_field=sort_field,
+            sort_order=sort_order,
+        )
 
     if question_count > 0:
         selected_problem_ids = selected_problem_ids[:question_count]
@@ -811,6 +890,7 @@ def render_pdf():
             "ai_provider": defaults.get("ai_provider", "gemini"),
             "gemini_model": defaults.get("gemini_model", "gemini-2.5-flash"),
             "groq_model": defaults.get("groq_model", DEFAULT_GROQ_MODEL),
+            "openai_model": defaults.get("openai_model", "gpt-4.1"),
             "use_ai_solver": defaults.get("use_ai_solver", "1"),
             "use_ocr": defaults.get("use_ocr", "1"),
             "allow_ocr_fallback_if_ai_fails": defaults.get("allow_ocr_fallback_if_ai_fails", "0"),
@@ -829,8 +909,10 @@ def render_pdf():
             "selector_pattern": pattern,
             "sort_field": sort_field,
             "sort_order": sort_order,
+            "manual_order_ids": " ".join(manual_order_ids),
             "question_count": str(question_count),
             "show_source_info": "1" if show_source_info else "0",
+            "show_unit_info": "1" if show_unit_info else "0",
             "teacher_view": "1" if teacher_view else "0",
         }
         return redirect(url_for("index", **next_defaults))
@@ -866,6 +948,8 @@ def render_pdf():
 
     if show_source_info:
         cmd.append("--show-source-info")
+    if show_unit_info:
+        cmd.append("--show-unit-info")
     if teacher_view:
         cmd.append("--teacher-view")
 
@@ -929,6 +1013,7 @@ def render_pdf():
         "ai_provider": defaults.get("ai_provider", "gemini"),
         "gemini_model": defaults.get("gemini_model", "gemini-2.5-flash"),
         "groq_model": defaults.get("groq_model", DEFAULT_GROQ_MODEL),
+        "openai_model": defaults.get("openai_model", "gpt-4.1"),
         "use_ai_solver": defaults.get("use_ai_solver", "1"),
         "use_ocr": defaults.get("use_ocr", "1"),
         "allow_ocr_fallback_if_ai_fails": defaults.get("allow_ocr_fallback_if_ai_fails", "0"),
@@ -947,8 +1032,10 @@ def render_pdf():
         "selector_pattern": pattern,
         "sort_field": sort_field,
         "sort_order": sort_order,
+        "manual_order_ids": " ".join(manual_order_ids),
         "question_count": str(question_count),
         "show_source_info": "1" if show_source_info else "0",
+        "show_unit_info": "1" if show_unit_info else "0",
         "teacher_view": "1" if teacher_view else "0",
         "selector_ids": " ".join(selector_ids),
         "title": request.form.get(

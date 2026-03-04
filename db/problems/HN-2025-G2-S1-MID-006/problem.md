@@ -26,7 +26,7 @@ assets:
 ## Q
 다음 그림은 함수 $y=\left(\frac{1}{4}\right)^x$, $y=\log_{\frac{1}{4}}x$의 그래프와 직선 $y=x$이다. $\frac{b}{\sqrt{a}}$의 값은?
 
-<img src="assets/scan.png" style="width: 107%; max-width: 107%;">
+<img src="assets/scan.png" style="width: 86%; max-width: 86%;">
 
 ## Choices
 ① $\frac{1}{2}$
@@ -49,3 +49,4 @@ $$ b = \left(\frac{1}{4}\right)^a = \left(\frac{1}{4}\right)^{\frac{1}{4}} = 2^{
 
 따라서 구하는 값은
 $$ \frac{b}{\sqrt{a}} = \frac{\frac{\sqrt{2}}{2}}{\sqrt{\frac{1}{4}}} = \frac{\frac{\sqrt{2}}{2}}{\frac{1}{2}} = \sqrt{2} $$
+

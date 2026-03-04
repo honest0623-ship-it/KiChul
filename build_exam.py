@@ -119,6 +119,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Show per-problem source info line (school/year/grade/semester/exam/source-no/ID).",
     )
     parser.add_argument(
+        "--show-unit-info",
+        action="store_true",
+        help="Show per-problem unit info line.",
+    )
+    parser.add_argument(
         "--teacher-view",
         action="store_true",
         help="Show inline answer under each problem in exam PDF (교사용 출력).",
@@ -164,6 +169,7 @@ def _build_layout(
     title: str,
     show_meta: bool,
     show_source_info: bool,
+    show_unit_info: bool,
     show_teacher_answer: bool,
 ) -> ExamLayout:
     paper_key = paper.upper()
@@ -175,18 +181,18 @@ def _build_layout(
     if paper_key == "A4":
         page_width_mm = 210
         page_height_mm = 297
-        margin_top_mm = 15
-        margin_right_mm = 12
-        margin_bottom_mm = 15
-        margin_left_mm = 12
+        margin_top_mm = 10
+        margin_right_mm = 8
+        margin_bottom_mm = 10
+        margin_left_mm = 8
         column_gap_mm = 9
     elif paper_key == "B4":
         page_width_mm = 257
         page_height_mm = 364
-        margin_top_mm = 15
-        margin_right_mm = 12
-        margin_bottom_mm = 15
-        margin_left_mm = 12
+        margin_top_mm = 10
+        margin_right_mm = 8
+        margin_bottom_mm = 10
+        margin_left_mm = 8
         column_gap_mm = 11
     else:
         raise ValueError(f"Unsupported paper type: {paper}")
@@ -205,6 +211,7 @@ def _build_layout(
         title=title,
         show_meta=show_meta,
         show_source_info=show_source_info,
+        show_unit_info=show_unit_info,
         show_teacher_answer=show_teacher_answer,
     )
 
@@ -227,6 +234,7 @@ def main() -> int:
             title=args.title,
             show_meta=args.show_meta,
             show_source_info=args.show_source_info,
+            show_unit_info=args.show_unit_info,
             show_teacher_answer=args.teacher_view,
         )
     except ValueError as exc:

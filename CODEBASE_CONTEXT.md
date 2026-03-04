@@ -183,3 +183,93 @@ python backfill_unit_level.py --root db/problems --pattern "HN-2025-G2-S1-MID-*"
   - Removed unused `_build_problem_markdown` parameter (`problem_no`).
   - Regression checks passed (compile/import/CLI render smoke).
 - Workspace hygiene: `.gitignore` now excludes `output/` and Python cache files.
+
+## 14. VSCode Agent용 DB 워크플로우 CLI (2026-03-03)
+
+- 브라우저 없이 터미널/에이전트에서 DB 업로드 배치를 돌리기 위한 스크립트:
+  - `scripts/db_workflow_cli.py`
+- 프로필 설정 파일:
+  - `scripts/db_workflow_profiles.json`
+- 런타임 상태 파일(자동 생성):
+  - `scripts/.db_workflow_state.json`
+- 작업계획서(자동 갱신):
+  - `scripts/DB_WORKFLOW_PLAN.md`
+
+### 기본 사용
+
+```powershell
+python scripts/db_workflow_cli.py start
+```
+
+- 위 한 줄로 `사전점검(plan) -> 중복 확인 -> chunk 실행 -> 결과 요약` 순서 수행.
+- 프로필 기본값은 `scripts/db_workflow_profiles.json`의 `active_profile`.
+- 기본 chunk/rpm/중복정책은 `defaults`의 `chunk_size=2`, `rpm=4`, `on_duplicate=ask`.
+- 메타를 한 줄로 바로 주는 방법:
+
+```powershell
+python scripts/db_workflow_cli.py start --meta "JE,2025,2,1,MID"
+```
+
+- `--meta` 형식: `school,year,grade,semester,exam`
+- `source_label`이 비어 있으면 `user_upload_YYYY-MM-DD`(오늘 날짜)로 자동 채움.
+
+### 소스 메타 자동 반영 (`db/original/_meta.json`)
+
+- `db/original`에 `_meta.json`(또는 `meta.json`)을 두면, 실행 시 프로필보다 우선 적용된다.
+- 따라서 ID 접두/연도/학년/학기/시험/출처가 배치마다 자동 변경된다.
+- 예시:
+
+```json
+{
+  "school": "JE",
+  "year": 2025,
+  "grade": 2,
+  "semester": 1,
+  "exam": "MID",
+  "source": "user_upload_2026-03-03",
+  "subjective_offset": 100
+}
+```
+
+- `source` 또는 `source_label` 둘 다 사용 가능하며 내부적으로 `source_label`로 반영된다.
+- 필요 시 CLI 인자로 최종 오버라이드 가능:
+  - `--school --year --grade --semester --exam --source-label --subjective-offset`
+
+### 중복 폴더가 있는 경우(ask 모드)
+
+- 중복이 있으면 실행을 멈추고 decision을 요구:
+  - `python scripts/db_workflow_cli.py resume --decision skip`
+  - `python scripts/db_workflow_cli.py resume --decision overwrite`
+
+### 중단 후 이어서 실행
+
+```powershell
+python scripts/db_workflow_cli.py resume
+```
+
+### 검수 경로만 출력
+
+```powershell
+python scripts/db_workflow_cli.py report --review-only
+```
+
+## 15. Workflow Update (2026-03-03)
+
+- `python scripts/db_workflow_cli.py start ...` now runs an automatic pre-clean step before preflight.
+- Pre-clean target: question images in `db/original` (excluding `_scan`, answer, solution companions).
+- It removes top-right footnote-like number marks (examples: `(16)`, `17)`) when detected by OCR boxes.
+- If OCR/OpenCV dependency is unavailable, the workflow prints pre-clean warnings and continues.
+
+## 16. AI Provider Update (2026-03-04)
+
+- Added `openai` as a third AI provider option across web UI and workflow CLI.
+- New runtime fields:
+  - `openai_api_key` (or `OPENAI_API_KEY` environment variable)
+  - `openai_model` (default: `gpt-4.1`)
+- Web ingest panel now supports:
+  - provider select: `Gemini / Groq / OpenAI`
+  - OpenAI model list refresh
+- Ingest runtime now routes AI solve by provider:
+  - `gemini` -> `gemini_solver.py`
+  - `groq` -> `groq_solver.py`
+  - `openai` -> `openai_solver.py`

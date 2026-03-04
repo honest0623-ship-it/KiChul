@@ -33,7 +33,7 @@ $$
 
 (단, 두 점 $C,D$는 제1사분면 위의 점이다.) (4.5점)
 
-![원본](assets/scan.png)
+<img src="assets/scan.png" alt="figure" style="width:66% !important; max-width:66% !important; height:auto;" />
 
 ## Choices
 ① 8  
@@ -83,3 +83,4 @@ $$
 \beta=A(\tfrac12)=-4\cdot \tfrac18+9\cdot \tfrac12=-\tfrac12+\tfrac{9}{2}=4.
 $$
 따라서 $\alpha+\beta=10+4=14$ (정답 ④).
+

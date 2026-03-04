@@ -9,6 +9,7 @@ import re
 import shutil
 from gemini_solver import solve_problem_with_gemini
 from groq_solver import DEFAULT_GROQ_MODEL, DEPRECATED_GROQ_MODELS, solve_problem_with_groq
+from openai_solver import solve_problem_with_openai
 from unit_level_classifier import classify_unit_and_level
 from unit_taxonomy import normalize_unit_triplet
 
@@ -54,6 +55,7 @@ MULTI_SPACE_RE = re.compile(r"[ \t]{2,}")
 SUBJECTIVE_RE = re.compile(r"서답\s*([0-9]{1,3})\s*번?", re.IGNORECASE)
 SIMPLE_NUMERIC_RE = re.compile(r"0*([0-9]{1,3})$")
 ANY_NUMERIC_TOKEN_RE = re.compile(r"(?<!\d)([0-9]{1,3})(?!\d)")
+FOOTNOTE_NUM_TOKEN_RE = re.compile(r"^[\(\[]?\d{1,3}[\)\]]?$")
 ANSWER_HINT_RE = re.compile(r"(정답|answer|ans)", re.IGNORECASE)
 SOLUTION_HINT_RE = re.compile(r"(해설|solution|sol|풀이)", re.IGNORECASE)
 ANSWER_TEXT_RE = re.compile(r"(?:정답|answer|ans)?\s*[:：]?\s*([①②③④⑤1-5])", re.IGNORECASE)
@@ -112,6 +114,8 @@ class IngestConfig:
     gemini_model: str = "gemini-2.5-flash"
     groq_api_key: str = ""
     groq_model: str = DEFAULT_GROQ_MODEL
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4.1"
     allow_ocr_fallback_if_ai_fails: bool = False
     move_after_ingest: bool = False
 
@@ -425,6 +429,293 @@ def _rapidocr_to_text(raw_result: Any) -> str:
             if stripped:
                 lines.append(stripped)
     return "\n".join(lines).strip()
+
+
+def _read_image_cv2(image_path: Path) -> Tuple[Optional[Any], Optional[str]]:
+    if cv2 is None:
+        return None, "OpenCV is not installed."
+    image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    if image is None:
+        return None, "Failed to read image."
+    return image, None
+
+
+def _write_image_cv2(image_path: Path, image: Any) -> Optional[str]:
+    if cv2 is None:
+        return "OpenCV is not installed."
+    try:
+        ok = cv2.imwrite(str(image_path), image)
+    except Exception as exc:  # pylint: disable=broad-except
+        return f"Failed to write image ({exc})."
+    if not ok:
+        return "Failed to write image."
+    return None
+
+
+def _bbox_from_quad(quad: Any) -> Optional[Tuple[int, int, int, int]]:
+    if isinstance(quad, (list, tuple)) and len(quad) == 4 and all(
+        isinstance(value, (int, float)) for value in quad
+    ):
+        x1, y1, x2, y2 = [int(round(float(value))) for value in quad]
+        if x2 > x1 and y2 > y1:
+            return x1, y1, x2, y2
+        return None
+
+    if not isinstance(quad, (list, tuple)):
+        return None
+
+    xs: List[int] = []
+    ys: List[int] = []
+    for point in quad:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        try:
+            x_val = int(round(float(point[0])))
+            y_val = int(round(float(point[1])))
+        except (TypeError, ValueError):
+            continue
+        xs.append(x_val)
+        ys.append(y_val)
+
+    if not xs or not ys:
+        return None
+
+    x1 = min(xs)
+    y1 = min(ys)
+    x2 = max(xs)
+    y2 = max(ys)
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return x1, y1, x2, y2
+
+
+def _rapidocr_word_boxes(image_path: Path) -> Tuple[List[Tuple[str, Tuple[int, int, int, int]]], Optional[str]]:
+    engine = _rapidocr_engine()
+    if engine is None:
+        return [], "RapidOCR unavailable."
+
+    try:
+        raw_result, _ = engine(str(image_path))
+    except Exception as exc:  # pylint: disable=broad-except
+        return [], f"RapidOCR failed: {exc}"
+
+    rows = raw_result or []
+    words: List[Tuple[str, Tuple[int, int, int, int]]] = []
+    for row in rows:
+        text: Optional[str] = None
+        quad: Any = None
+        if isinstance(row, dict):
+            if isinstance(row.get("text"), str):
+                text = row.get("text")
+            quad = row.get("box") or row.get("points") or row.get("bbox")
+        elif isinstance(row, (list, tuple)):
+            if row:
+                quad = row[0]
+            if len(row) >= 2:
+                second = row[1]
+                if isinstance(second, str):
+                    text = second
+                elif isinstance(second, (list, tuple)) and second and isinstance(second[0], str):
+                    text = second[0]
+            if text is None and row and isinstance(row[-1], str):
+                text = row[-1]
+
+        if not text:
+            continue
+        stripped = text.strip()
+        if not stripped:
+            continue
+        bbox = _bbox_from_quad(quad)
+        if bbox is None:
+            continue
+        words.append((stripped, bbox))
+    return words, None
+
+
+def _tesseract_word_boxes(
+    image_path: Path, lang: str
+) -> Tuple[List[Tuple[str, Tuple[int, int, int, int]]], Optional[str]]:
+    if pytesseract is None or Image is None:
+        return [], "Tesseract dependencies are not installed."
+    if not hasattr(pytesseract, "Output") or not hasattr(pytesseract.Output, "DICT"):
+        return [], "Unsupported pytesseract version (Output.DICT missing)."
+
+    try:
+        with Image.open(image_path) as img:
+            data = pytesseract.image_to_data(
+                img,
+                lang=lang,
+                output_type=pytesseract.Output.DICT,
+            )
+    except Exception as exc:  # pylint: disable=broad-except
+        return [], f"Tesseract failed: {exc}"
+
+    texts = list(data.get("text") or [])
+    lefts = list(data.get("left") or [])
+    tops = list(data.get("top") or [])
+    widths = list(data.get("width") or [])
+    heights = list(data.get("height") or [])
+    confs = list(data.get("conf") or [])
+    if not texts:
+        return [], None
+
+    words: List[Tuple[str, Tuple[int, int, int, int]]] = []
+    max_len = min(len(texts), len(lefts), len(tops), len(widths), len(heights))
+    for idx in range(max_len):
+        text = str(texts[idx] or "").strip()
+        if not text:
+            continue
+
+        conf_raw = str(confs[idx] if idx < len(confs) else "")
+        try:
+            conf_val = float(conf_raw)
+        except ValueError:
+            conf_val = 0.0
+        if conf_val < 20:
+            continue
+
+        try:
+            x1 = int(lefts[idx])
+            y1 = int(tops[idx])
+            width = int(widths[idx])
+            height = int(heights[idx])
+        except (TypeError, ValueError):
+            continue
+
+        if width <= 1 or height <= 1:
+            continue
+        x2 = x1 + width
+        y2 = y1 + height
+        words.append((text, (x1, y1, x2, y2)))
+
+    return words, None
+
+
+def _vertical_overlap_ratio(
+    box_a: Tuple[int, int, int, int], box_b: Tuple[int, int, int, int]
+) -> float:
+    a_h = max(1, box_a[3] - box_a[1])
+    b_h = max(1, box_b[3] - box_b[1])
+    overlap = max(0, min(box_a[3], box_b[3]) - max(box_a[1], box_b[1]))
+    return overlap / float(min(a_h, b_h))
+
+
+def _remove_top_right_footnote_number(image_path: Path, lang: str) -> Tuple[bool, Optional[str]]:
+    if cv2 is None or np is None:
+        return False, "Pre-clean skipped (OpenCV/numpy not available)."
+
+    image, read_warning = _read_image_cv2(image_path)
+    if image is None:
+        return False, read_warning or "Pre-clean skipped (failed to read image)."
+
+    image_height, image_width = image.shape[:2]
+
+    boxes, _ = _rapidocr_word_boxes(image_path)
+    warning: Optional[str] = None
+    if not boxes:
+        tess_boxes, tess_warning = _tesseract_word_boxes(image_path, lang=lang)
+        boxes = tess_boxes
+        if not boxes:
+            warning = _merge_warning("No OCR boxes found.", tess_warning)
+
+    if not boxes:
+        return False, warning
+
+    score_token_re = re.compile(r"[\[\(]?\s*\d+(?:\.\d+)?\s*점\s*[\]\)]?")
+    score_boxes: List[Tuple[int, int, int, int]] = []
+    for text, box in boxes:
+        compact = re.sub(r"\s+", "", text)
+        if "점" in compact and score_token_re.search(compact):
+            score_boxes.append(box)
+
+    top_limit = int(image_height * 0.52)
+    right_limit = int(image_width * 0.55)
+    candidates: List[Tuple[int, int, int, int]] = []
+
+    for raw_text, box in boxes:
+        token = re.sub(r"\s+", "", raw_text or "")
+        token = token.replace("（", "(").replace("）", ")").replace("【", "[").replace("】", "]")
+        if not FOOTNOTE_NUM_TOKEN_RE.fullmatch(token):
+            continue
+
+        x1, y1, x2, y2 = box
+        if y2 > top_limit or x1 < right_limit:
+            continue
+
+        width = x2 - x1
+        height = y2 - y1
+        if width <= 0 or height <= 0:
+            continue
+        if width > int(image_width * 0.2) or height > int(image_height * 0.12):
+            continue
+
+        if score_boxes:
+            anchored = False
+            for score_box in score_boxes:
+                if _vertical_overlap_ratio(box, score_box) >= 0.35 and x1 >= score_box[0] - int(image_width * 0.03):
+                    anchored = True
+                    break
+            if not anchored and x2 < int(image_width * 0.92):
+                continue
+
+        candidates.append(box)
+
+    if not candidates:
+        return False, None
+
+    def _candidate_key(candidate_box: Tuple[int, int, int, int]) -> Tuple[float, int, int]:
+        x1, y1, x2, y2 = candidate_box
+        overlap_score = 0.0
+        if score_boxes:
+            overlap_score = max(_vertical_overlap_ratio(candidate_box, score_box) for score_box in score_boxes)
+        area = (x2 - x1) * (y2 - y1)
+        return overlap_score, x2, -area
+
+    target_box = max(candidates, key=_candidate_key)
+    x1, y1, x2, y2 = target_box
+    pad_x = max(2, int((x2 - x1) * 0.22))
+    pad_y = max(2, int((y2 - y1) * 0.28))
+    rx1 = max(0, x1 - pad_x)
+    ry1 = max(0, y1 - pad_y)
+    rx2 = min(image_width - 1, x2 + pad_x)
+    ry2 = min(image_height - 1, y2 + pad_y)
+    cv2.rectangle(image, (rx1, ry1), (rx2, ry2), (255, 255, 255), thickness=-1)
+
+    write_warning = _write_image_cv2(image_path, image)
+    if write_warning:
+        return False, write_warning
+    return True, None
+
+
+def remove_top_right_footnote_numbers_in_dir(
+    original_dir: Path, lang: str = "kor+eng"
+) -> Tuple[List[str], List[str]]:
+    if not original_dir.exists():
+        return [], [f"{original_dir} does not exist."]
+
+    if cv2 is None or np is None:
+        return [], ["Pre-clean skipped: OpenCV/numpy is not installed."]
+
+    rapid_available = _rapidocr_engine() is not None
+    tess_available = pytesseract is not None and Image is not None
+    if not rapid_available and not tess_available:
+        return [], [
+            "Pre-clean skipped: OCR engine unavailable (install rapidocr-onnxruntime or Pillow+pytesseract)."
+        ]
+
+    changed_files: List[str] = []
+    warnings: List[str] = []
+    for path in list_original_images(original_dir):
+        candidate = detect_candidate(path)
+        if candidate.detected_problem_no is None:
+            continue
+        changed, warning = _remove_top_right_footnote_number(path, lang=lang)
+        if changed:
+            changed_files.append(path.name)
+        elif warning:
+            warnings.append(f"{path.name}: {warning}")
+
+    return changed_files, warnings
 
 
 def detect_ocr_ready() -> Tuple[bool, str]:
@@ -833,7 +1124,7 @@ def ingest_images(
     )
 
     ai_provider = (config.ai_provider or "gemini").strip().lower()
-    if ai_provider not in {"gemini", "groq"}:
+    if ai_provider not in {"gemini", "groq", "openai"}:
         ai_provider = "gemini"
     selected_groq_model = (
         DEFAULT_GROQ_MODEL if config.groq_model in DEPRECATED_GROQ_MODELS else config.groq_model
@@ -841,14 +1132,22 @@ def ingest_images(
 
     ocr_ready, ocr_message = detect_ocr_ready()
     if config.use_ai_solver:
-        selected_key = (
-            config.gemini_api_key if ai_provider == "gemini" else config.groq_api_key
-        )
+        if ai_provider == "groq":
+            selected_key = config.groq_api_key
+        elif ai_provider == "openai":
+            selected_key = config.openai_api_key
+        else:
+            selected_key = config.gemini_api_key
     else:
         selected_key = ""
 
     if config.use_ai_solver and not selected_key.strip():
-        provider_name = "Gemini" if ai_provider == "gemini" else "Groq"
+        if ai_provider == "groq":
+            provider_name = "Groq"
+        elif ai_provider == "openai":
+            provider_name = "OpenAI"
+        else:
+            provider_name = "Gemini"
         warnings.append(
             f"AI 자동 풀이가 체크되었지만 {provider_name} API 키가 비어 있어 DB 생성을 중단했습니다."
         )
@@ -985,6 +1284,13 @@ def ingest_images(
                             image_path=dest_file,
                             ocr_hint=ocr_hint,
                         )
+                    elif ai_provider == "openai":
+                        ai_result = solve_problem_with_openai(
+                            api_key=config.openai_api_key,
+                            model=config.openai_model,
+                            image_path=dest_file,
+                            ocr_hint=ocr_hint,
+                        )
                     else:
                         ai_result = solve_problem_with_gemini(
                             api_key=config.gemini_api_key,
@@ -994,7 +1300,12 @@ def ingest_images(
                         )
                 except Exception as exc:  # pylint: disable=broad-except
                     ai_error = str(exc)
-                    provider_name = "Groq" if ai_provider == "groq" else "Gemini"
+                    if ai_provider == "groq":
+                        provider_name = "Groq"
+                    elif ai_provider == "openai":
+                        provider_name = "OpenAI"
+                    else:
+                        provider_name = "Gemini"
                     if _is_auth_error(ai_error):
                         ai_auth_failed = True
                         auth_failure_message = (

@@ -41,10 +41,15 @@ $$
 
 ## Solution
 $$
-a_{12}=3\cdot1\cdot2-1+k=5+k,\qquad
+a_{12}=3\cdot1\cdot2-1+k=5+k
+$$
+$$
 a_{31}=3\cdot3\cdot1-3+k=6+k
 $$
 이므로
 $$
-(5+k)+(6+k)=7\Rightarrow 11+2k=7\Rightarrow 2k=-4\Rightarrow k=-2.
+(5+k)+(6+k)=7
+$$
+$$
+11+2k=7,\quad 2k=-4,\quad k=-2
 $$

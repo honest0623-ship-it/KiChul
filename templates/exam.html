@@ -175,6 +175,16 @@
     .teacher-answer p {
       margin: 0 0 0.85mm 0;
     }
+    .question p.display-math-line,
+    .choices p.display-math-line,
+    .teacher-answer p.display-math-line {
+      margin-bottom: 0.1mm !important;
+    }
+    .question p.after-display-math,
+    .choices p.after-display-math,
+    .teacher-answer p.after-display-math {
+      margin-top: 0 !important;
+    }
 
     .question p:last-child,
     .choices p:last-child,
@@ -209,6 +219,10 @@
     mjx-container,
     mjx-container * {
       font-weight: 400 !important;
+    }
+    .display-math-line mjx-container[display="true"] svg {
+      max-width: 100% !important;
+      height: auto !important;
     }
 
     .question img,
@@ -248,14 +262,18 @@
         <header class="problem-head">
           <div class="head-left">{{ problem.number }}번</div>
           <div class="head-right">
-            {% set exam_info = problem.source_exam_info if show_source_info and problem.source_exam_info else "-" %}
-            {% set unit_info = problem.source_unit_info if show_source_info and problem.source_unit_info else "-" %}
-            <div class="meta-line">
-              <span class="meta-value meta-exam{% if exam_info == '-' %} placeholder{% endif %}">{{ exam_info }}</span>
-            </div>
-            <div class="meta-line">
-              <span class="meta-value meta-unit{% if unit_info == '-' %} placeholder{% endif %}">{{ unit_info }}</span>
-            </div>
+            {% if show_source_info %}
+              {% set exam_info = problem.source_exam_info if problem.source_exam_info else "-" %}
+              <div class="meta-line">
+                <span class="meta-value meta-exam{% if exam_info == '-' %} placeholder{% endif %}">{{ exam_info }}</span>
+              </div>
+            {% endif %}
+            {% if show_unit_info %}
+              {% set unit_info = problem.source_unit_info if problem.source_unit_info else "-" %}
+              <div class="meta-line">
+                <span class="meta-value meta-unit{% if unit_info == '-' %} placeholder{% endif %}">{{ unit_info }}</span>
+              </div>
+            {% endif %}
           </div>
         </header>
         <div class="problem-body">
@@ -387,6 +405,24 @@
         });
       }
 
+      function compactDisplayMathParagraphs(scope) {
+        const root = scope || document;
+        const blocks = root.querySelectorAll(".question, .choices, .teacher-answer");
+        blocks.forEach((block) => {
+          const paragraphs = Array.from(block.querySelectorAll("p"));
+          paragraphs.forEach((p) => {
+            p.classList.remove("display-math-line", "after-display-math");
+          });
+          for (let i = 0; i < paragraphs.length; i += 1) {
+            const p = paragraphs[i];
+            if (!p.querySelector('mjx-container[display="true"]')) continue;
+            p.classList.add("display-math-line");
+            const next = paragraphs[i + 1];
+            if (next) next.classList.add("after-display-math");
+          }
+        });
+      }
+
       function layoutProblemPages() {
         const root = document.getElementById("layout-root");
         const pool = document.getElementById("problem-pool");
@@ -423,6 +459,7 @@
 
         const pages = buildPages(measured, boxHeightPx);
         renderPages(root, pages, pageBodyHeightPx, boxHeightPx);
+        compactDisplayMathParagraphs(root);
         pool.style.display = "none";
       }
 

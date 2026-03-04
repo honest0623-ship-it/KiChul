@@ -46,6 +46,7 @@ class ExamLayout:
     title: str
     show_meta: bool
     show_source_info: bool
+    show_unit_info: bool
     show_teacher_answer: bool
 
 
@@ -196,6 +197,8 @@ SOLUTION_SHEET_TEMPLATE = """
     .answer,
     .solution {
       margin-bottom: 0.7mm;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .answer p,
     .solution p {
@@ -212,6 +215,13 @@ SOLUTION_SHEET_TEMPLATE = """
     .solution mjx-container[display="true"] {
       margin-top: 0.35mm !important;
       margin-bottom: 0.35mm !important;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .answer mjx-container[display="true"] svg,
+    .solution mjx-container[display="true"] svg {
+      max-width: 100% !important;
+      height: auto !important;
     }
     .answer img,
     .solution img {
@@ -294,6 +304,14 @@ def _rewrite_img_sources(
 
 
 def _markdown_to_html(md_text: str) -> str:
+    # Tighten spacing after standalone display formulas.
+    md_text = re.sub(
+        r"(\\\[.*?\\\]|\$\$.*?\$\$)\n{2,}(?=\S)",
+        r"\1\n",
+        md_text,
+        flags=re.DOTALL,
+    )
+
     # Preserve TeX segments before markdown conversion.
     # Python-Markdown consumes backslashes in normal text, which breaks
     # matrix/cases syntax (e.g., "\\\\", "\\begin{...}") used by MathJax.
@@ -627,6 +645,7 @@ def render_exam_pdf(
         title=layout.title,
         show_meta=layout.show_meta,
         show_source_info=layout.show_source_info,
+        show_unit_info=layout.show_unit_info,
         show_teacher_answer=layout.show_teacher_answer,
         paper=layout.paper,
         page_width_mm=layout.page_width_mm,

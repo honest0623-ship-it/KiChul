@@ -6,7 +6,7 @@ grade: 1
 semester: 1
 exam: Final
 type: 서답형(단답형)
-source_question_no: 102
+source_question_no: 2
 source_question_kind: subjective
 source_question_label: '서답2번'
 difficulty: '4'

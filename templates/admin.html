@@ -247,6 +247,60 @@
       background: #f9fafb;
       font-size: 13px;
     }
+    .manual-order-wrap {
+      border: 1px solid #d9e0e7;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 10px;
+      margin-top: 8px;
+      grid-column: 1 / -1;
+    }
+    .manual-order-list {
+      list-style: none;
+      margin: 8px 0 0 0;
+      padding: 0;
+      display: grid;
+      gap: 6px;
+      max-height: 220px;
+      overflow: auto;
+    }
+    .manual-order-item {
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px 10px;
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .manual-order-item:active {
+      cursor: grabbing;
+    }
+    .manual-order-item.dragging {
+      opacity: 0.55;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+    }
+    .manual-order-handle {
+      color: #64748b;
+      font-weight: 700;
+      flex: 0 0 auto;
+    }
+    .manual-order-id {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12px;
+      color: #0f172a;
+      flex: 0 0 auto;
+    }
+    .manual-order-meta {
+      color: #475569;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     @media (max-width: 1050px) {
       .meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .form-grid { grid-template-columns: 1fr; }
@@ -341,6 +395,7 @@
             <select id="ai_provider" name="ai_provider">
               <option value="gemini" {% if ai_provider == "gemini" %}selected{% endif %}>Gemini</option>
               <option value="groq" {% if ai_provider == "groq" %}selected{% endif %}>Groq</option>
+              <option value="openai" {% if ai_provider == "openai" %}selected{% endif %}>OpenAI</option>
             </select>
           </div>
           <div></div>
@@ -359,6 +414,15 @@
             <select id="groq_model" name="groq_model">
               {% for model in groq_models %}
                 <option value="{{ model }}" {% if model == defaults.groq_model %}selected{% endif %}>{{ model }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div><label for="openai_api_key">OpenAI API Key</label><input id="openai_api_key" type="password" name="openai_api_key" autocomplete="off" /></div>
+          <div>
+            <label for="openai_model">OpenAI 모델</label>
+            <select id="openai_model" name="openai_model">
+              {% for model in openai_models %}
+                <option value="{{ model }}" {% if model == defaults.openai_model %}selected{% endif %}>{{ model }}</option>
               {% endfor %}
             </select>
           </div>
@@ -610,6 +674,7 @@
         <div class="form-grid">
           <div><label for="selector_pattern">추가 Pattern 필터</label><input id="selector_pattern" type="text" name="selector_pattern" value="{{ pdf_selected.pattern }}" placeholder="예: HN-2025-G1-S1-MID-*" /></div>
           <div><label for="selector_ids">IDs 직접 지정</label><textarea id="selector_ids" name="selector_ids" placeholder="HN-2025-G1-S1-MID-006 HN-2025-G1-S1-MID-008">{{ pdf_selected.selector_ids }}</textarea></div>
+          <input id="manual_order_ids" type="hidden" name="manual_order_ids" value="{{ pdf_selected.manual_order_ids }}" />
           <div>
             <label for="sort_field">정렬 기준</label>
             <select id="sort_field" name="sort_field">
@@ -617,6 +682,7 @@
               <option value="unit" {% if pdf_selected.sort_field == "unit" %}selected{% endif %}>단원별</option>
               <option value="school" {% if pdf_selected.sort_field == "school" %}selected{% endif %}>학교별</option>
               <option value="year" {% if pdf_selected.sort_field == "year" %}selected{% endif %}>연도별</option>
+              <option value="manual" {% if pdf_selected.sort_field == "manual" %}selected{% endif %}>직접 지정 순서</option>
             </select>
           </div>
           <div>
@@ -631,14 +697,24 @@
           <div><label for="question_count">출제 문항수 (0=전체)</label><input id="question_count" type="number" name="question_count" min="0" value="{{ pdf_selected.question_count }}" /></div>
           <div><label for="title">Title</label><input id="title" type="text" name="title" value="{{ pdf_selected.title }}" /></div>
           <div><label for="out_name">Output PDF Name</label><input id="out_name" type="text" name="out_name" value="exam_from_web.pdf" /></div>
+          <div class="manual-order-wrap">
+            <label>문항 순서 드래그 편집</label>
+            <p class="muted">필터 결과를 불러온 뒤 항목을 드래그해 순서를 바꾸세요. 저장 시 수동 순서 IDs에 자동 반영됩니다.</p>
+            <div class="inline" style="margin-top: 6px;">
+              <button class="btn secondary js-load-filtered-order" type="button" style="padding: 6px 10px;">필터 결과 불러오기</button>
+              <button class="btn secondary js-clear-manual-order" type="button" style="padding: 6px 10px;">수동 순서 초기화</button>
+            </div>
+            <ul id="manual-order-list" class="manual-order-list"></ul>
+          </div>
         </div>
 
         <div class="inline">
           <label><input type="checkbox" name="show_source_info" {% if pdf_selected.show_source_info %}checked{% endif %} /> 문항별 기출정보 표시</label>
+          <label><input type="checkbox" name="show_unit_info" {% if pdf_selected.show_unit_info %}checked{% endif %} /> 문항별 단원정보 표시</label>
           <label><input type="checkbox" name="teacher_view" {% if pdf_selected.teacher_view %}checked{% endif %} /> 교사용 출력(문항 아래 정답 표시)</label>
           <label><input type="checkbox" name="answer_sheet" /> 답안지 PDF 생성</label>
           <label>답안지 파일명 <input type="text" name="answer_name" value="answer_sheet_web.pdf" style="width: 200px;" /></label>
-          <label><input type="checkbox" name="solution_sheet" /> 해설지 PDF 생성(정답+해설)</label>
+          <label><input type="checkbox" name="solution_sheet" checked /> 해설지 PDF 생성(정답+해설)</label>
           <label>해설지 파일명 <input type="text" name="solution_name" value="solution_sheet_web.pdf" style="width: 220px;" /></label>
         </div>
 
@@ -652,6 +728,8 @@
   <script>
     (function () {
       const unitPanel = document.getElementById("unit-panel");
+      const problemMeta = {{ problem_meta | tojson | safe }};
+      const problemMetaById = new Map(problemMeta.map((row) => [row.id, row]));
 
       const setChecked = (panelId, inputName, checked) => {
         const panel = document.getElementById(panelId);
@@ -771,6 +849,255 @@
       });
 
       initUnitTree();
+
+      const selectorIdsInput = document.getElementById("selector_ids");
+      const selectorPatternInput = document.getElementById("selector_pattern");
+      const manualOrderIdsInput = document.getElementById("manual_order_ids");
+      const manualOrderList = document.getElementById("manual-order-list");
+      const sortFieldInput = document.getElementById("sort_field");
+      const sortOrderInput = document.getElementById("sort_order");
+      const loadFilteredOrderBtn = document.querySelector(".js-load-filtered-order");
+      const clearManualOrderBtn = document.querySelector(".js-clear-manual-order");
+
+      const parseIds = (raw) => {
+        const token = (raw || "").trim();
+        if (!token) return [];
+        return token.split(/[\s,]+/).filter(Boolean);
+      };
+
+      const uniqueIds = (ids) => {
+        const rows = [];
+        const seen = new Set();
+        ids.forEach((id) => {
+          if (!id || seen.has(id)) return;
+          seen.add(id);
+          rows.push(id);
+        });
+        return rows;
+      };
+
+      const toInt = (value, fallback) => {
+        const token = String(value || "").trim();
+        return /^[0-9]+$/.test(token) ? Number(token) : fallback;
+      };
+
+      const globToRegex = (pattern) => {
+        const escaped = String(pattern || "")
+          .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+          .replace(/\*/g, ".*")
+          .replace(/\?/g, ".");
+        return new RegExp(`^${escaped}$`);
+      };
+
+      const getCheckedValues = (name) =>
+        Array.from(document.querySelectorAll(`input[type="checkbox"][name="${name}"]:checked`)).map(
+          (box) => box.value
+        );
+
+      const unitNodeMatches = (unitPath, nodeId) => {
+        if (!unitPath || !nodeId) return false;
+        if (nodeId.startsWith("L3::")) {
+          return unitPath === nodeId.slice(4);
+        }
+        if (nodeId.startsWith("L2::")) {
+          const prefix = nodeId.slice(4);
+          return unitPath === prefix || unitPath.startsWith(`${prefix}>`);
+        }
+        if (nodeId.startsWith("S::")) {
+          const prefix = nodeId.slice(3);
+          return unitPath === prefix || unitPath.startsWith(`${prefix}>`);
+        }
+        return false;
+      };
+
+      const unitMatches = (unitPath, selectedNodes) => {
+        if (!selectedNodes.length) return true;
+        return selectedNodes.some((nodeId) => unitNodeMatches(unitPath, nodeId));
+      };
+
+      const syncManualInput = (ids) => {
+        if (!manualOrderIdsInput) return;
+        manualOrderIdsInput.value = ids.join(" ");
+      };
+
+      const getManualListIds = () => {
+        if (!manualOrderList) return [];
+        return Array.from(manualOrderList.querySelectorAll(".manual-order-item"))
+          .map((node) => node.dataset.id || "")
+          .filter(Boolean);
+      };
+
+      const renderManualOrderList = (ids) => {
+        if (!manualOrderList) return;
+        manualOrderList.innerHTML = "";
+        if (!ids.length) {
+          const empty = document.createElement("li");
+          empty.className = "muted";
+          empty.textContent = "정렬할 문항 목록이 없습니다. '필터 결과 불러오기'를 눌러주세요.";
+          manualOrderList.appendChild(empty);
+          return;
+        }
+
+        let draggingId = "";
+        ids.forEach((id, index) => {
+          const row = problemMetaById.get(id);
+          const examLabel = row
+            ? `${row.school} ${row.year} G${row.grade} S${row.semester} ${row.exam} ${row.source_label || ""}`
+            : "메타정보 없음";
+          const unitLabel = row && row.unit ? row.unit : "";
+
+          const item = document.createElement("li");
+          item.className = "manual-order-item";
+          item.draggable = true;
+          item.dataset.id = id;
+          item.innerHTML = `
+            <span class="manual-order-handle">${index + 1}.</span>
+            <span class="manual-order-id">${id}</span>
+            <span class="manual-order-meta">${examLabel}${unitLabel ? ` | ${unitLabel}` : ""}</span>
+          `;
+
+          item.addEventListener("dragstart", (event) => {
+            draggingId = id;
+            item.classList.add("dragging");
+            if (event.dataTransfer) {
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", id);
+            }
+          });
+
+          item.addEventListener("dragend", () => {
+            item.classList.remove("dragging");
+          });
+
+          item.addEventListener("dragover", (event) => {
+            event.preventDefault();
+            if (event.dataTransfer) {
+              event.dataTransfer.dropEffect = "move";
+            }
+          });
+
+          item.addEventListener("drop", (event) => {
+            event.preventDefault();
+            const fromId =
+              draggingId || (event.dataTransfer ? event.dataTransfer.getData("text/plain") : "");
+            if (!fromId || fromId === id) return;
+            const current = getManualListIds();
+            const fromIndex = current.indexOf(fromId);
+            const toIndex = current.indexOf(id);
+            if (fromIndex < 0 || toIndex < 0) return;
+            const [moved] = current.splice(fromIndex, 1);
+            current.splice(toIndex, 0, moved);
+            syncManualInput(current);
+            renderManualOrderList(current);
+          });
+
+          manualOrderList.appendChild(item);
+        });
+      };
+
+      const collectFilteredProblemIds = () => {
+        const selectedSchools = new Set(getCheckedValues("schools"));
+        const selectedYears = new Set(getCheckedValues("years"));
+        const selectedGrades = new Set(getCheckedValues("grades"));
+        const selectedSemesters = new Set(getCheckedValues("semesters"));
+        const selectedExams = new Set(getCheckedValues("exams"));
+        const selectedUnitNodes = getCheckedValues("unit_nodes");
+        const selectedLevels = new Set(getCheckedValues("levels"));
+        const selectedSourceNos = new Set(getCheckedValues("source_numbers"));
+
+        const selectorIds = uniqueIds(parseIds(selectorIdsInput ? selectorIdsInput.value : ""));
+        const patternText = selectorPatternInput ? selectorPatternInput.value.trim() : "";
+        const patternRegex = patternText ? globToRegex(patternText) : null;
+
+        let rows = [];
+        if (selectorIds.length) {
+          rows = selectorIds
+            .map((id) => problemMetaById.get(id))
+            .filter(Boolean);
+        } else {
+          rows = problemMeta.filter((row) => {
+            if (selectedSchools.size && !selectedSchools.has(row.school)) return false;
+            if (selectedYears.size && !selectedYears.has(String(row.year))) return false;
+            if (selectedGrades.size && !selectedGrades.has(String(row.grade))) return false;
+            if (selectedSemesters.size && !selectedSemesters.has(String(row.semester))) return false;
+            if (selectedExams.size && !selectedExams.has(row.exam)) return false;
+            if (!unitMatches(String(row.unit || ""), selectedUnitNodes)) return false;
+            if (selectedLevels.size && !selectedLevels.has(String(row.level || ""))) return false;
+            if (selectedSourceNos.size && !selectedSourceNos.has(String(row.source_label || ""))) return false;
+            return true;
+          });
+        }
+
+        if (patternRegex) {
+          rows = rows.filter((row) => patternRegex.test(row.id));
+        }
+
+        const sortField = sortFieldInput ? sortFieldInput.value : "default";
+        const sortOrder = sortOrderInput ? sortOrderInput.value : "asc";
+        const desc = sortOrder === "desc";
+        if (sortField !== "manual" && rows.length > 1) {
+          const keyOf = (row) => {
+            const school = String(row.school || "").trim();
+            const year = toInt(row.year, 9999);
+            const grade = toInt(row.grade, 99);
+            const semester = toInt(row.semester, 99);
+            const exam = String(row.exam || "").trim();
+            const unit = String(row.unit || "").trim();
+            const number = toInt(row.number, 999);
+            if (sortField === "unit") return [unit, school, year, grade, semester, exam, number, row.id];
+            if (sortField === "school") return [school, year, grade, semester, exam, unit, number, row.id];
+            if (sortField === "year") return [year, school, grade, semester, exam, unit, number, row.id];
+            return [row.id];
+          };
+          rows.sort((a, b) => {
+            const ka = keyOf(a);
+            const kb = keyOf(b);
+            for (let i = 0; i < Math.max(ka.length, kb.length); i += 1) {
+              if (ka[i] < kb[i]) return desc ? 1 : -1;
+              if (ka[i] > kb[i]) return desc ? -1 : 1;
+            }
+            return 0;
+          });
+          if (sortField === "default" && desc) {
+            rows.reverse();
+          }
+        } else if (sortField === "default" && desc) {
+          rows.reverse();
+        }
+
+        return uniqueIds(rows.map((row) => row.id));
+      };
+
+      const refreshSortControls = () => {
+        if (!sortFieldInput || !sortOrderInput) return;
+        const manual = sortFieldInput.value === "manual";
+        sortOrderInput.disabled = manual;
+        sortOrderInput.title = manual ? "직접 지정 순서에서는 정렬 방향이 적용되지 않습니다." : "";
+      };
+
+      if (sortFieldInput) {
+        sortFieldInput.addEventListener("change", refreshSortControls);
+      }
+      refreshSortControls();
+
+      if (loadFilteredOrderBtn) {
+        loadFilteredOrderBtn.addEventListener("click", () => {
+          const ids = collectFilteredProblemIds();
+          syncManualInput(ids);
+          renderManualOrderList(ids);
+          if (sortFieldInput) sortFieldInput.value = "manual";
+          refreshSortControls();
+        });
+      }
+
+      if (clearManualOrderBtn) {
+        clearManualOrderBtn.addEventListener("click", () => {
+          syncManualInput([]);
+          renderManualOrderList([]);
+        });
+      }
+
+      renderManualOrderList(uniqueIds(parseIds(manualOrderIdsInput ? manualOrderIdsInput.value : "")));
 
       const toggleCard = (button) => {
         const targetId = button.dataset.targetId;
