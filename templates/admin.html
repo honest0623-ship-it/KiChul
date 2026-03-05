@@ -654,13 +654,36 @@
           <input id="manual_order_ids" type="hidden" name="manual_order_ids" value="{{ pdf_selected.manual_order_ids }}" />
           <input id="manual_selected_ids" type="hidden" name="manual_selected_ids" value="{{ pdf_selected.manual_selected_ids }}" />
           <div>
-            <label for="sort_field">정렬 기준</label>
-            <select id="sort_field" name="sort_field">
-              <option value="default" {% if pdf_selected.sort_field == "default" %}selected{% endif %}>기본(ID 순)</option>
-              <option value="unit" {% if pdf_selected.sort_field == "unit" %}selected{% endif %}>단원별</option>
-              <option value="school" {% if pdf_selected.sort_field == "school" %}selected{% endif %}>학교별</option>
-              <option value="year" {% if pdf_selected.sort_field == "year" %}selected{% endif %}>연도별</option>
-              <option value="manual" {% if pdf_selected.sort_field == "manual" %}selected{% endif %}>직접 지정 순서</option>
+            <label for="sort_field_1">정렬 기준1</label>
+            <select id="sort_field_1" name="sort_field_1">
+              <option value="default" {% if pdf_selected.sort_field_1 == "default" %}selected{% endif %}>기본(ID 순)</option>
+              <option value="unit" {% if pdf_selected.sort_field_1 == "unit" %}selected{% endif %}>단원별</option>
+              <option value="school" {% if pdf_selected.sort_field_1 == "school" %}selected{% endif %}>학교별</option>
+              <option value="year" {% if pdf_selected.sort_field_1 == "year" %}selected{% endif %}>연도별</option>
+              <option value="source" {% if pdf_selected.sort_field_1 == "source" %}selected{% endif %}>기출번호</option>
+              <option value="manual" {% if pdf_selected.sort_field_1 == "manual" %}selected{% endif %}>직접 지정 순서</option>
+            </select>
+          </div>
+          <div>
+            <label for="sort_field_2">정렬 기준2</label>
+            <select id="sort_field_2" name="sort_field_2">
+              <option value="none" {% if pdf_selected.sort_field_2 == "none" %}selected{% endif %}>없음</option>
+              <option value="default" {% if pdf_selected.sort_field_2 == "default" %}selected{% endif %}>기본(ID 순)</option>
+              <option value="unit" {% if pdf_selected.sort_field_2 == "unit" %}selected{% endif %}>단원별</option>
+              <option value="school" {% if pdf_selected.sort_field_2 == "school" %}selected{% endif %}>학교별</option>
+              <option value="year" {% if pdf_selected.sort_field_2 == "year" %}selected{% endif %}>연도별</option>
+              <option value="source" {% if pdf_selected.sort_field_2 == "source" %}selected{% endif %}>기출번호</option>
+            </select>
+          </div>
+          <div>
+            <label for="sort_field_3">정렬 기준3</label>
+            <select id="sort_field_3" name="sort_field_3">
+              <option value="none" {% if pdf_selected.sort_field_3 == "none" %}selected{% endif %}>없음</option>
+              <option value="default" {% if pdf_selected.sort_field_3 == "default" %}selected{% endif %}>기본(ID 순)</option>
+              <option value="unit" {% if pdf_selected.sort_field_3 == "unit" %}selected{% endif %}>단원별</option>
+              <option value="school" {% if pdf_selected.sort_field_3 == "school" %}selected{% endif %}>학교별</option>
+              <option value="year" {% if pdf_selected.sort_field_3 == "year" %}selected{% endif %}>연도별</option>
+              <option value="source" {% if pdf_selected.sort_field_3 == "source" %}selected{% endif %}>기출번호</option>
             </select>
           </div>
           <div>
@@ -906,7 +929,10 @@
       const manualPreviewTitle = document.getElementById("manual-preview-title");
       const manualPreviewSubtitle = document.getElementById("manual-preview-subtitle");
       const manualPreviewContent = document.getElementById("manual-preview-content");
-      const sortFieldInput = document.getElementById("sort_field");
+      const sortFieldInput1 = document.getElementById("sort_field_1");
+      const sortFieldInput2 = document.getElementById("sort_field_2");
+      const sortFieldInput3 = document.getElementById("sort_field_3");
+      const sortFieldInputs = [sortFieldInput1, sortFieldInput2, sortFieldInput3].filter(Boolean);
       const sortOrderInput = document.getElementById("sort_order");
       const renderForm = document.querySelector('form[action="/render"]');
       const loadFilteredOrderBtn = document.querySelector(".js-load-filtered-order");
@@ -960,6 +986,37 @@
       const toInt = (value, fallback) => {
         const token = String(value || "").trim();
         return /^[0-9]+$/.test(token) ? Number(token) : fallback;
+      };
+
+      const normalizeSortField = (value, slotIndex) => {
+        const token = String(value || "").trim().toLowerCase();
+        const allFields = new Set(["default", "unit", "school", "year", "source", "manual"]);
+        if (slotIndex <= 1) {
+          return allFields.has(token) ? token : "default";
+        }
+        if (token === "none") return "none";
+        if (allFields.has(token) && token !== "manual") return token;
+        return "none";
+      };
+
+      const getSortFieldSlots = () => [
+        normalizeSortField(sortFieldInput1 ? sortFieldInput1.value : "default", 1),
+        normalizeSortField(sortFieldInput2 ? sortFieldInput2.value : "none", 2),
+        normalizeSortField(sortFieldInput3 ? sortFieldInput3.value : "none", 3),
+      ];
+
+      const getEffectiveSortFields = () => {
+        const ordered = [];
+        const slots = getSortFieldSlots();
+        for (let index = 0; index < slots.length; index += 1) {
+          const field = slots[index];
+          const normalized = normalizeSortField(field, index + 1);
+          if (normalized === "none") continue;
+          if (ordered.includes(normalized)) continue;
+          ordered.push(normalized);
+          if (normalized === "manual") break;
+        }
+        return ordered.length ? ordered : ["default"];
       };
 
       const setMetaEditorStatus = (message, isError = false) => {
@@ -1591,11 +1648,13 @@
           rows = rows.filter((row) => patternCandidates(row).some((token) => patternRegex.test(token)));
         }
 
-        const sortField = sortFieldInput ? sortFieldInput.value : "default";
+        const sortFieldSlots = getSortFieldSlots();
+        const primarySortField = sortFieldSlots[0];
+        const effectiveSortFields = getEffectiveSortFields();
         const sortOrder = sortOrderInput ? sortOrderInput.value : "asc";
         const desc = sortOrder === "desc";
-        if (sortField !== "manual" && rows.length > 1) {
-          const keyOf = (row) => {
+        if (primarySortField !== "manual" && rows.length > 1) {
+          const keyOf = (row, sortField) => {
             const school = String(row.school || "").trim();
             const year = toInt(row.year, 9999);
             const grade = toInt(row.grade, 99);
@@ -1604,47 +1663,64 @@
             const subject = String(row.subject || "").trim();
             const unit = String(row.unit || "").trim();
             const number = toInt(row.number, 999);
-            if (sortField === "unit") return [unit, school, year, grade, semester, exam, subject, number, row.id];
-            if (sortField === "school") return [school, year, grade, semester, exam, subject, unit, number, row.id];
-            if (sortField === "year") return [year, school, grade, semester, exam, subject, unit, number, row.id];
+            const sourceNo = toInt(row.source_no, 999);
+            const sourceKindBaseRank =
+              String(row.source_kind || "").trim().toLowerCase() === "subjective" ? 1 : 0;
+            // Keep objective block before subjective block even when sort_order is desc.
+            const sourceKindRank =
+              sortField === "source" && desc ? 1 - sourceKindBaseRank : sourceKindBaseRank;
+            // Multi-key sorting: each slot compares only its own dimension.
+            // Remaining ties are resolved by the next sort slots and final id.
+            if (sortField === "unit") return [unit];
+            if (sortField === "school") return [school];
+            if (sortField === "year") return [year];
+            if (sortField === "source") return [sourceKindRank, sourceNo];
             return [row.id];
           };
-          rows.sort((a, b) => {
-            const ka = keyOf(a);
-            const kb = keyOf(b);
-            for (let i = 0; i < Math.max(ka.length, kb.length); i += 1) {
+          const compareKeys = (ka, kb) => {
+            const maxLen = Math.max(ka.length, kb.length);
+            for (let i = 0; i < maxLen; i += 1) {
               if (ka[i] < kb[i]) return desc ? 1 : -1;
               if (ka[i] > kb[i]) return desc ? -1 : 1;
             }
             return 0;
+          };
+          rows.sort((a, b) => {
+            for (const field of effectiveSortFields) {
+              const result = compareKeys(keyOf(a, field), keyOf(b, field));
+              if (result !== 0) return result;
+            }
+            return compareKeys([a.id], [b.id]);
           });
-          if (sortField === "default" && desc) {
-            rows.reverse();
-          }
-        } else if (sortField === "default" && desc) {
-          rows.reverse();
         }
 
         return uniqueIds(rows.map((row) => row.id));
       };
 
       const refreshSortControls = () => {
-        if (!sortFieldInput || !sortOrderInput) return;
-        const manual = sortFieldInput.value === "manual";
+        if (!sortOrderInput) return;
+        const manual = normalizeSortField(sortFieldInput1 ? sortFieldInput1.value : "default", 1) === "manual";
         sortOrderInput.disabled = manual;
         sortOrderInput.title = manual ? "직접 지정 순서에서는 정렬 방향이 적용되지 않습니다." : "";
+        [sortFieldInput2, sortFieldInput3].forEach((fieldInput) => {
+          if (!fieldInput) return;
+          fieldInput.disabled = manual;
+          fieldInput.title = manual ? "직접 지정 순서에서는 정렬 기준2/3이 적용되지 않습니다." : "";
+        });
       };
 
-      if (sortFieldInput) {
-        sortFieldInput.addEventListener("change", refreshSortControls);
-      }
+      sortFieldInputs.forEach((fieldInput) => {
+        fieldInput.addEventListener("change", refreshSortControls);
+      });
       refreshSortControls();
 
       if (loadFilteredOrderBtn) {
         loadFilteredOrderBtn.addEventListener("click", () => {
           const ids = collectFilteredProblemIds();
           renderManualOrderList(ids, { checkedIds: ids, defaultChecked: true });
-          if (sortFieldInput) sortFieldInput.value = "manual";
+          if (sortFieldInput1) sortFieldInput1.value = "manual";
+          if (sortFieldInput2) sortFieldInput2.value = "none";
+          if (sortFieldInput3) sortFieldInput3.value = "none";
           refreshSortControls();
         });
       }

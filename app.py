@@ -63,7 +63,7 @@ DEFAULTS = {
     "semester": "1",
     "exam": "MID",
 }
-SORT_FIELDS = {"default", "unit", "school", "year", "manual"}
+SORT_FIELDS = {"default", "unit", "school", "year", "source", "manual"}
 SORT_ORDERS = {"asc", "desc"}
 SUBJECT_CODE_ALIASES = {
     "COM1": "COM1",
@@ -457,11 +457,41 @@ def _sort_exam_values(values: List[str]) -> List[str]:
     return sorted(values, key=key)
 
 
-def _normalize_sort_field(raw: str) -> str:
+def _normalize_sort_field(raw: str, *, slot_index: int = 1) -> str:
     token = (raw or "").strip().lower()
-    if token in SORT_FIELDS:
+    if slot_index <= 1:
+        if token in SORT_FIELDS:
+            return token
+        return "default"
+    if token in SORT_FIELDS and token != "manual":
         return token
-    return "default"
+    if token == "none":
+        return "none"
+    return "none"
+
+
+def _normalize_sort_field_slots(raw_fields: List[str]) -> List[str]:
+    normalized: List[str] = []
+    for slot_index in range(1, 4):
+        raw = raw_fields[slot_index - 1] if slot_index - 1 < len(raw_fields) else ""
+        normalized.append(_normalize_sort_field(raw, slot_index=slot_index))
+    return normalized
+
+
+def _effective_sort_fields(sort_fields: List[str]) -> List[str]:
+    ordered: List[str] = []
+    for slot_index, token in enumerate(sort_fields, start=1):
+        field = _normalize_sort_field(token, slot_index=slot_index)
+        if field == "none":
+            continue
+        if field in ordered:
+            continue
+        ordered.append(field)
+        if field == "manual":
+            break
+    if not ordered:
+        return ["default"]
+    return ordered
 
 
 def _normalize_sort_order(raw: str) -> str:
@@ -474,17 +504,21 @@ def _normalize_sort_order(raw: str) -> str:
 def _sort_selected_problem_ids(
     selected_problem_ids: List[str],
     problem_meta: List[Dict[str, str]],
-    sort_field: str,
+    sort_fields: List[str],
     sort_order: str,
 ) -> List[str]:
-    sort_field = _normalize_sort_field(sort_field)
+    normalized_slots = _normalize_sort_field_slots(sort_fields)
+    effective_fields = _effective_sort_fields(normalized_slots)
     sort_order = _normalize_sort_order(sort_order)
     items = list(selected_problem_ids)
 
     if len(items) < 2:
         return items
 
-    if sort_field in {"default", "manual"}:
+    if effective_fields and effective_fields[0] == "manual":
+        return items
+
+    if effective_fields == ["default"]:
         if sort_order == "desc":
             items.reverse()
         return items
@@ -495,7 +529,7 @@ def _sort_selected_problem_ids(
         token = str(value or "").strip()
         return int(token) if token.isdigit() else fallback
 
-    def _key(problem_id: str) -> tuple[Any, ...]:
+    def _key_for_field(problem_id: str, sort_field: str) -> tuple[Any, ...]:
         row = meta_by_id.get(problem_id, {})
         school = str(row.get("school", "")).strip()
         year = _as_int(str(row.get("year", "")), 9999)
@@ -505,16 +539,36 @@ def _sort_selected_problem_ids(
         subject = str(row.get("subject", "")).strip()
         unit = str(row.get("unit", "")).strip()
         number = _as_int(str(row.get("number", "")), 999)
+        source_no = _as_int(str(row.get("source_no", "")), 999)
+        source_kind = str(row.get("source_kind", "")).strip().lower()
+        source_kind_base_rank = 1 if source_kind == "subjective" else 0
+        # Keep objective block before subjective block even when sort_order is desc.
+        source_kind_rank = (
+            (1 - source_kind_base_rank)
+            if sort_field == "source" and sort_order == "desc"
+            else source_kind_base_rank
+        )
 
+        # For multi-key sorting, each key should include only its own dimension.
+        # Tie-breaking is handled by subsequent sort fields and final problem_id.
         if sort_field == "unit":
-            return (unit, school, year, grade, semester, exam, subject, number, problem_id)
+            return (unit,)
         if sort_field == "school":
-            return (school, year, grade, semester, exam, subject, unit, number, problem_id)
+            return (school,)
         if sort_field == "year":
-            return (year, school, grade, semester, exam, subject, unit, number, problem_id)
+            return (year,)
+        if sort_field == "source":
+            return (source_kind_rank, source_no)
         return (problem_id,)
 
-    return sorted(items, key=_key, reverse=(sort_order == "desc"))
+    def _composite_key(problem_id: str) -> tuple[Any, ...]:
+        keys = []
+        for field in effective_fields:
+            keys.append(_key_for_field(problem_id, field))
+        keys.append((problem_id,))
+        return tuple(keys)
+
+    return sorted(items, key=_composite_key, reverse=(sort_order == "desc"))
 
 
 def _apply_manual_order(
@@ -645,6 +699,15 @@ def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) ->
     if not selected_unit_nodes:
         selected_unit_nodes = default_selected_unit_nodes()
 
+    legacy_sort_field = request.args.get("sort_field", "")
+    sort_field_slots = _normalize_sort_field_slots(
+        [
+            request.args.get("sort_field_1", legacy_sort_field or "default"),
+            request.args.get("sort_field_2", "none"),
+            request.args.get("sort_field_3", "none"),
+        ]
+    )
+
     return {
         "schools": pick_all_when_empty("schools"),
         "years": pick_all_when_empty("years"),
@@ -659,7 +722,9 @@ def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) ->
         "selector_ids": request.args.get("selector_ids", ""),
         "manual_order_ids": request.args.get("manual_order_ids", ""),
         "manual_selected_ids": request.args.get("manual_selected_ids", ""),
-        "sort_field": _normalize_sort_field(request.args.get("sort_field", "default")),
+        "sort_field_1": sort_field_slots[0],
+        "sort_field_2": sort_field_slots[1],
+        "sort_field_3": sort_field_slots[2],
         "sort_order": _normalize_sort_order(request.args.get("sort_order", "asc")),
         "question_count": request.args.get("question_count", "0"),
         "show_source_info": request.args.get("show_source_info", "1") != "0",
@@ -962,7 +1027,16 @@ def render_pdf():
     manual_selected_supplied = "manual_selected_ids" in request.form
     manual_selected_ids = _extract_ids(request.form.get("manual_selected_ids", ""))
     pattern = request.form.get("selector_pattern", "").strip()
-    sort_field = _normalize_sort_field(request.form.get("sort_field", "default"))
+    legacy_sort_field = request.form.get("sort_field", "")
+    sort_field_slots = _normalize_sort_field_slots(
+        [
+            request.form.get("sort_field_1", legacy_sort_field or "default"),
+            request.form.get("sort_field_2", "none"),
+            request.form.get("sort_field_3", "none"),
+        ]
+    )
+    effective_sort_fields = _effective_sort_fields(sort_field_slots)
+    primary_sort_field = sort_field_slots[0]
     sort_order = _normalize_sort_order(request.form.get("sort_order", "asc"))
     question_count = max(_parse_int(request.form.get("question_count", "0"), 0), 0)
     show_source_info = bool(request.form.get("show_source_info"))
@@ -975,7 +1049,7 @@ def render_pdf():
     problem_meta = _scan_problem_meta()
     available_ids = {item["id"] for item in problem_meta}
     manual_selected_ids = [item for item in manual_selected_ids if item in available_ids]
-    manual_selection_active = manual_selected_supplied and (sort_field == "manual" or bool(manual_order_ids))
+    manual_selection_active = manual_selected_supplied and (primary_sort_field == "manual" or bool(manual_order_ids))
     selected_problem_ids: List[str] = []
 
     if selector_ids:
@@ -1010,7 +1084,7 @@ def render_pdf():
         selected_manual_set = set(manual_selected_ids)
         selected_problem_ids = [item for item in selected_problem_ids if item in selected_manual_set]
 
-    if sort_field == "manual":
+    if primary_sort_field == "manual":
         manual_reference_ids = (
             manual_selected_ids
             if manual_selection_active
@@ -1028,7 +1102,7 @@ def render_pdf():
         selected_problem_ids = _sort_selected_problem_ids(
             selected_problem_ids=selected_problem_ids,
             problem_meta=problem_meta,
-            sort_field=sort_field,
+            sort_fields=effective_sort_fields,
             sort_order=sort_order,
         )
 
@@ -1052,7 +1126,9 @@ def render_pdf():
             "levels": levels,
             "source_numbers": source_numbers,
             "selector_pattern": pattern,
-            "sort_field": sort_field,
+            "sort_field_1": sort_field_slots[0],
+            "sort_field_2": sort_field_slots[1],
+            "sort_field_3": sort_field_slots[2],
             "sort_order": sort_order,
             "manual_order_ids": " ".join(manual_order_ids),
             "manual_selected_ids": " ".join(manual_selected_ids),
@@ -1081,7 +1157,9 @@ def render_pdf():
             "levels": levels,
             "source_numbers": source_numbers,
             "selector_pattern": pattern,
-            "sort_field": sort_field,
+            "sort_field_1": sort_field_slots[0],
+            "sort_field_2": sort_field_slots[1],
+            "sort_field_3": sort_field_slots[2],
             "sort_order": sort_order,
             "manual_order_ids": " ".join(manual_order_ids),
             "manual_selected_ids": " ".join(manual_selected_ids),
@@ -1194,7 +1272,9 @@ def render_pdf():
         "levels": levels,
         "source_numbers": source_numbers,
         "selector_pattern": pattern,
-        "sort_field": sort_field,
+        "sort_field_1": sort_field_slots[0],
+        "sort_field_2": sort_field_slots[1],
+        "sort_field_3": sort_field_slots[2],
         "sort_order": sort_order,
         "manual_order_ids": " ".join(manual_order_ids),
         "manual_selected_ids": " ".join(manual_selected_ids),
