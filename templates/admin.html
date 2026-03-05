@@ -101,6 +101,7 @@
       cursor: pointer;
     }
     .btn.secondary { background: #4b5563; }
+    .btn.danger { background: #b91c1c; }
     .table-wrap {
       overflow-x: auto;
       border: 1px solid #d9e0e7;
@@ -208,26 +209,38 @@
       padding: 10px;
       margin-top: 8px;
       grid-column: 1 / -1;
+      --manual-order-list-height: 1050px;
+      --manual-preview-height: var(--manual-order-list-height);
     }
     .manual-order-list {
       list-style: none;
-      margin: 8px 0 0 0;
+      margin: 0;
       padding: 0;
       display: grid;
       gap: 6px;
-      max-height: 220px;
-      overflow: auto;
+      min-height: var(--manual-order-list-height);
+      max-height: var(--manual-order-list-height);
+      overflow-y: auto;
+      overflow-x: hidden;
     }
     .manual-order-item {
       border: 1px solid #cbd5e1;
       border-radius: 8px;
       background: #fff;
-      padding: 8px 10px;
+      padding: 7px 8px;
       cursor: grab;
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-size: 13px;
+      gap: 6px;
+      font-size: 12px;
+    }
+    .manual-order-check {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      flex: 0 0 auto;
+      cursor: pointer;
+      accent-color: #2563eb;
     }
     .manual-order-item:active {
       cursor: grabbing;
@@ -253,30 +266,96 @@
     }
     .manual-order-id {
       font-family: Consolas, "Courier New", monospace;
-      font-size: 12px;
+      font-size: 11px;
       color: #0f172a;
       flex: 0 0 auto;
     }
     .manual-order-meta {
       color: #475569;
+      flex: 1 1 auto;
       min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      overflow: visible;
+      text-overflow: clip;
       white-space: nowrap;
+    }
+    .manual-order-edit {
+      flex: 0 0 auto;
+      padding: 5px 8px;
+      font-size: 11px;
+      background: #0f766e;
+    }
+    .manual-order-edit:hover {
+      background: #115e59;
+    }
+    .meta-editor-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 12px;
+    }
+    .meta-editor-backdrop.open {
+      display: flex;
+    }
+    .meta-editor-dialog {
+      width: min(880px, 96vw);
+      max-height: 92vh;
+      overflow: auto;
+      border-radius: 12px;
+      border: 1px solid #94a3b8;
+      background: #fff;
+      padding: 12px;
+    }
+    .meta-editor-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0;
+    }
+    .meta-editor-subtitle {
+      margin-top: 4px;
+      color: #64748b;
+      font-size: 12px;
+      word-break: break-all;
+    }
+    .meta-editor-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .meta-editor-actions {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .meta-editor-status {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #334155;
     }
     .manual-order-main {
       margin-top: 8px;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 10px;
-      align-items: start;
+      grid-template-columns: minmax(0, 3fr) minmax(440px, 2fr);
+      gap: 8px;
+      align-items: stretch;
     }
     .manual-preview-panel {
       border: 1px solid #cbd5e1;
       border-radius: 8px;
       background: #fff;
-      padding: 8px 10px;
-      min-height: 220px;
+      padding: 10px 12px;
+      min-height: var(--manual-preview-height);
+      height: var(--manual-preview-height);
+      max-height: var(--manual-preview-height);
+      display: flex;
+      flex-direction: column;
     }
     .manual-preview-title {
       font-size: 13px;
@@ -291,9 +370,11 @@
     }
     .manual-preview-content {
       margin-top: 8px;
-      max-height: 340px;
+      max-height: none;
+      flex: 1 1 auto;
+      min-height: 0;
       overflow: auto;
-      font-size: 13px;
+      font-size: 14px;
       line-height: 1.45;
       color: #111827;
     }
@@ -328,6 +409,14 @@
       .meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .form-grid { grid-template-columns: 1fr; }
       .manual-order-main { grid-template-columns: 1fr; }
+      .manual-preview-panel {
+        min-height: 220px;
+        height: auto;
+        max-height: none;
+      }
+      .meta-editor-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
   {% if mathjax_bundle_uri %}
@@ -560,9 +649,10 @@
         </div>
 
         <div class="form-grid">
-          <div><label for="selector_pattern">추가 Pattern 필터</label><input id="selector_pattern" type="text" name="selector_pattern" value="{{ pdf_selected.pattern }}" placeholder="예: HN-2025-G1-S1-MID-*" /></div>
+          <div><label for="selector_pattern">추가 Pattern 필터</label><input id="selector_pattern" type="text" name="selector_pattern" value="{{ pdf_selected.pattern }}" placeholder="예: HN-2025-G2-S1-MID-STAT-* 또는 HN.2025.G2.S1.MID(STAT)" /></div>
           <div><label for="selector_ids">IDs 직접 지정</label><textarea id="selector_ids" name="selector_ids" placeholder="HN-2025-G1-S1-MID-006 HN-2025-G1-S1-MID-008">{{ pdf_selected.selector_ids }}</textarea></div>
           <input id="manual_order_ids" type="hidden" name="manual_order_ids" value="{{ pdf_selected.manual_order_ids }}" />
+          <input id="manual_selected_ids" type="hidden" name="manual_selected_ids" value="{{ pdf_selected.manual_selected_ids }}" />
           <div>
             <label for="sort_field">정렬 기준</label>
             <select id="sort_field" name="sort_field">
@@ -587,10 +677,12 @@
           <div><label for="out_name">Output PDF Name</label><input id="out_name" type="text" name="out_name" value="exam_from_web.pdf" /></div>
           <div class="manual-order-wrap">
             <label>문항 순서 드래그 편집</label>
-            <p class="muted">필터 결과를 불러온 뒤 항목을 드래그해 순서를 바꾸세요. 저장 시 수동 순서 IDs에 자동 반영됩니다.</p>
+            <p class="muted">필터 결과를 불러온 뒤 항목을 드래그해 순서를 바꾸고, 체크박스로 출제 문항을 선택하세요. 체크된 문항만 출제됩니다.</p>
             <div class="inline" style="margin-top: 6px;">
               <button class="btn secondary js-load-filtered-order" type="button" style="padding: 6px 10px;">필터 결과 불러오기</button>
               <button class="btn secondary js-clear-manual-order" type="button" style="padding: 6px 10px;">수동 순서 초기화</button>
+              <button class="btn secondary js-manual-check-all" type="button" style="padding: 6px 10px;">전체선택</button>
+              <button class="btn secondary js-manual-uncheck-all" type="button" style="padding: 6px 10px;">전체 해제</button>
             </div>
             <div class="manual-order-main">
               <ul id="manual-order-list" class="manual-order-list"></ul>
@@ -608,17 +700,75 @@
         <div class="inline">
           <label><input type="checkbox" name="show_source_info" {% if pdf_selected.show_source_info %}checked{% endif %} /> 문항별 기출정보 표시</label>
           <label><input type="checkbox" name="show_unit_info" {% if pdf_selected.show_unit_info %}checked{% endif %} /> 문항별 단원정보 표시</label>
-          <label><input type="checkbox" name="teacher_view" {% if pdf_selected.teacher_view %}checked{% endif %} /> 교사용 출력(문항 아래 정답 표시)</label>
-          <label><input type="checkbox" name="answer_sheet" /> 답안지 PDF 생성</label>
-          <label>답안지 파일명 <input type="text" name="answer_name" value="answer_sheet_web.pdf" style="width: 200px;" /></label>
+        </div>
+
+        <div class="inline">
+          <label><input type="checkbox" name="exam_sheet" {% if pdf_selected.exam_sheet %}checked{% endif %} /> 문제지 PDF 생성</label>
           <label><input type="checkbox" name="solution_sheet" checked /> 해설지 PDF 생성(정답+해설)</label>
-          <label>해설지 파일명 <input type="text" name="solution_name" value="solution_sheet_web.pdf" style="width: 220px;" /></label>
+          <label><input type="checkbox" name="answer_sheet" /> 답안지 PDF 생성</label>
+          <label><input type="checkbox" name="teacher_view" {% if pdf_selected.teacher_view %}checked{% endif %} /> 교사용 출력(문항 아래 정답 표시)</label>
         </div>
 
         <div class="inline">
           <button class="btn secondary" type="submit">PDF 생성 실행</button>
         </div>
       </form>
+    </section>
+
+    <section id="meta-editor-backdrop" class="meta-editor-backdrop" aria-hidden="true">
+      <div class="meta-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="meta-editor-title">
+        <h3 id="meta-editor-title" class="meta-editor-title">문항 메타정보 수정</h3>
+        <div id="meta-editor-subtitle" class="meta-editor-subtitle">-</div>
+        <div class="meta-editor-grid">
+          <div><label for="meta_school">school</label><input id="meta_school" type="text" /></div>
+          <div><label for="meta_year">year</label><input id="meta_year" type="text" /></div>
+          <div><label for="meta_grade">grade</label><input id="meta_grade" type="text" /></div>
+          <div><label for="meta_semester">semester</label><input id="meta_semester" type="text" /></div>
+          <div><label for="meta_exam">exam</label>
+            <select id="meta_exam">
+              <option value="MID">MID</option>
+              <option value="MID2">MID2</option>
+              <option value="FINAL">FINAL</option>
+              <option value="FINAL2">FINAL2</option>
+            </select>
+          </div>
+          <div><label for="meta_subject">subject</label>
+            <select id="meta_subject">
+              <option value="COM1">공통수학1 (COM1)</option>
+              <option value="COM2">공통수학2 (COM2)</option>
+              <option value="ALG">대수 (ALG)</option>
+              <option value="CAL1">미적분1 (CAL1)</option>
+              <option value="STAT">확률과 통계 (STAT)</option>
+            </select>
+          </div>
+          <div><label for="meta_source_no">source_question_no</label><input id="meta_source_no" type="text" /></div>
+          <div><label for="meta_source_kind">source_question_kind</label>
+            <select id="meta_source_kind">
+              <option value="objective">objective</option>
+              <option value="subjective">subjective</option>
+            </select>
+          </div>
+          <div><label for="meta_source_label">source_question_label</label><input id="meta_source_label" type="text" /></div>
+          <div><label for="meta_type">type</label><input id="meta_type" type="text" /></div>
+          <div><label for="meta_level">level(1~5)</label><input id="meta_level" type="text" /></div>
+          <div><label for="meta_difficulty">difficulty</label><input id="meta_difficulty" type="text" /></div>
+          <div><label for="meta_unit_l1">unit_l1</label>
+            <select id="meta_unit_l1"></select>
+          </div>
+          <div><label for="meta_unit_l2">unit_l2</label>
+            <select id="meta_unit_l2"></select>
+          </div>
+          <div><label for="meta_unit_l3">unit_l3</label>
+            <select id="meta_unit_l3"></select>
+          </div>
+        </div>
+        <div id="meta-editor-status" class="meta-editor-status"></div>
+        <div class="meta-editor-actions">
+          <button id="meta-editor-delete" class="btn danger" type="button">삭제</button>
+          <button id="meta-editor-cancel" class="btn secondary" type="button">취소</button>
+          <button id="meta-editor-save" class="btn" type="button">저장</button>
+        </div>
+      </div>
     </section>
   </div>
 
@@ -627,6 +777,7 @@
       const unitPanel = document.getElementById("unit-panel");
       const problemMeta = {{ problem_meta | tojson | safe }};
       const problemMetaById = new Map(problemMeta.map((row) => [row.id, row]));
+      const unitTreeData = {{ pdf_options.unit_tree | tojson | safe }};
 
       const setChecked = (panelId, inputName, checked) => {
         const panel = document.getElementById(panelId);
@@ -750,16 +901,42 @@
       const selectorIdsInput = document.getElementById("selector_ids");
       const selectorPatternInput = document.getElementById("selector_pattern");
       const manualOrderIdsInput = document.getElementById("manual_order_ids");
+      const manualSelectedIdsInput = document.getElementById("manual_selected_ids");
       const manualOrderList = document.getElementById("manual-order-list");
       const manualPreviewTitle = document.getElementById("manual-preview-title");
       const manualPreviewSubtitle = document.getElementById("manual-preview-subtitle");
       const manualPreviewContent = document.getElementById("manual-preview-content");
       const sortFieldInput = document.getElementById("sort_field");
       const sortOrderInput = document.getElementById("sort_order");
+      const renderForm = document.querySelector('form[action="/render"]');
       const loadFilteredOrderBtn = document.querySelector(".js-load-filtered-order");
       const clearManualOrderBtn = document.querySelector(".js-clear-manual-order");
+      const manualCheckAllBtn = document.querySelector(".js-manual-check-all");
+      const manualUncheckAllBtn = document.querySelector(".js-manual-uncheck-all");
       const defaultPreviewMessage = "문항을 마우스로 클릭하거나, 선택된 문항에서 방향키로 이동하면 미리보기가 갱신됩니다.";
+      const metaEditorBackdrop = document.getElementById("meta-editor-backdrop");
+      const metaEditorSubtitle = document.getElementById("meta-editor-subtitle");
+      const metaEditorStatus = document.getElementById("meta-editor-status");
+      const metaEditorDeleteBtn = document.getElementById("meta-editor-delete");
+      const metaEditorSaveBtn = document.getElementById("meta-editor-save");
+      const metaEditorCancelBtn = document.getElementById("meta-editor-cancel");
+      const metaSchoolInput = document.getElementById("meta_school");
+      const metaYearInput = document.getElementById("meta_year");
+      const metaGradeInput = document.getElementById("meta_grade");
+      const metaSemesterInput = document.getElementById("meta_semester");
+      const metaExamInput = document.getElementById("meta_exam");
+      const metaSubjectInput = document.getElementById("meta_subject");
+      const metaSourceNoInput = document.getElementById("meta_source_no");
+      const metaSourceKindInput = document.getElementById("meta_source_kind");
+      const metaSourceLabelInput = document.getElementById("meta_source_label");
+      const metaTypeInput = document.getElementById("meta_type");
+      const metaLevelInput = document.getElementById("meta_level");
+      const metaDifficultyInput = document.getElementById("meta_difficulty");
+      const metaUnitL1Input = document.getElementById("meta_unit_l1");
+      const metaUnitL2Input = document.getElementById("meta_unit_l2");
+      const metaUnitL3Input = document.getElementById("meta_unit_l3");
       let selectedManualOrderId = "";
+      let editingProblemId = "";
       let previewAbortController = null;
       const previewCache = new Map();
 
@@ -785,12 +962,230 @@
         return /^[0-9]+$/.test(token) ? Number(token) : fallback;
       };
 
+      const setMetaEditorStatus = (message, isError = false) => {
+        if (!metaEditorStatus) return;
+        metaEditorStatus.textContent = String(message || "");
+        metaEditorStatus.style.color = isError ? "#b91c1c" : "#334155";
+      };
+
+      const SUBJECT_VALUES = ["COM1", "COM2", "ALG", "CAL1", "STAT"];
+      const SUBJECT_SET = new Set(SUBJECT_VALUES);
+      const normalizeSubjectToken = (value) =>
+        String(value || "")
+          .trim()
+          .replace(/Ⅰ/g, "I")
+          .replace(/\s+/g, "")
+          .toUpperCase();
+      const SUBJECT_ALIASES = new Map(
+        [
+          ["공통수학1", "COM1"],
+          ["공통수학1(2022개정)", "COM1"],
+          ["COM1", "COM1"],
+          ["COMMON1", "COM1"],
+          ["공통수학2", "COM2"],
+          ["공통수학2(2022개정)", "COM2"],
+          ["COM2", "COM2"],
+          ["COMMON2", "COM2"],
+          ["대수", "ALG"],
+          ["대수(2022개정)", "ALG"],
+          ["ALG", "ALG"],
+          ["미적분1", "CAL1"],
+          ["미적분I", "CAL1"],
+          ["미적분Ⅰ", "CAL1"],
+          ["미적분I(2022개정)", "CAL1"],
+          ["미적분Ⅰ(2022개정)", "CAL1"],
+          ["CAL1", "CAL1"],
+          ["CALC1", "CAL1"],
+          ["확률과통계", "STAT"],
+          ["확률과 통계", "STAT"],
+          ["확률통계", "STAT"],
+          ["확통", "STAT"],
+          ["확률과 통계(2022개정)", "STAT"],
+          ["STAT", "STAT"],
+        ].map(([raw, canonical]) => [normalizeSubjectToken(raw), canonical])
+      );
+      const inferSubjectFromUnitL1 = (unitL1) => {
+        const token = String(unitL1 || "").trim();
+        if (!token) return "";
+        if (token.startsWith("공통수학1")) return "COM1";
+        if (token.startsWith("공통수학2")) return "COM2";
+        if (token.startsWith("대수")) return "ALG";
+        if (token.startsWith("미적분")) return "CAL1";
+        if (token.startsWith("확률과 통계")) return "STAT";
+        return "";
+      };
+      const normalizeSubjectForSelect = (subject, unitL1 = "") => {
+        const token = normalizeSubjectToken(subject);
+        if (token) {
+          const mapped = SUBJECT_ALIASES.get(token);
+          if (mapped) return mapped;
+        }
+        const inferred = inferSubjectFromUnitL1(unitL1);
+        if (inferred) return inferred;
+        return "";
+      };
+
+      const setSelectOptions = (selectEl, options, selectedValue) => {
+        if (!selectEl) return;
+        const selected = String(selectedValue || "").trim();
+        const rows = Array.isArray(options) ? options : [];
+        selectEl.innerHTML = rows
+          .map((entry) => {
+            const value = String((entry && entry.value) || "").trim();
+            const label = String((entry && entry.label) || value).trim();
+            const picked = value && value === selected ? " selected" : "";
+            return `<option value="${escapeHtml(value)}"${picked}>${escapeHtml(label)}</option>`;
+          })
+          .join("");
+        if (rows.length === 0) {
+          selectEl.innerHTML = '<option value="">-</option>';
+        } else if (!rows.some((entry) => String((entry && entry.value) || "").trim() === selected) && rows[0]) {
+          selectEl.value = String((rows[0] && rows[0].value) || "");
+        }
+      };
+
+      const unitL1Nodes = Array.isArray(unitTreeData) ? unitTreeData : [];
+      const stripPrefix = (value, prefix) => {
+        const token = String(value || "");
+        return token.startsWith(prefix) ? token.slice(prefix.length) : token;
+      };
+      const unitL1Entries = unitL1Nodes.map((node) => ({
+        value: stripPrefix(node.id, "S::"),
+        label: String(node.label || ""),
+        node,
+      }));
+      const unitL1Map = new Map(unitL1Entries.map((entry) => [entry.value, entry.node]));
+
+      const syncUnitSelectors = (target = {}) => {
+        const selectedL1 = String(target.unit_l1 || (metaUnitL1Input ? metaUnitL1Input.value : "") || "").trim();
+        setSelectOptions(metaUnitL1Input, unitL1Entries, selectedL1);
+
+        const currentL1 = metaUnitL1Input ? String(metaUnitL1Input.value || "").trim() : "";
+        const l1Node = unitL1Map.get(currentL1) || null;
+        const l2Rows = l1Node && Array.isArray(l1Node.children) ? l1Node.children : [];
+        const selectedL2 = String(target.unit_l2 || (metaUnitL2Input ? metaUnitL2Input.value : "") || "").trim();
+        const l2Entries = l2Rows.map((node) => ({
+          value: String(node.label || ""),
+          label: String(node.label || ""),
+          node,
+        }));
+        setSelectOptions(metaUnitL2Input, l2Entries, selectedL2);
+
+        const currentL2 = metaUnitL2Input ? String(metaUnitL2Input.value || "").trim() : "";
+        const l2Node = l2Entries.find((entry) => String(entry.value || "") === currentL2)?.node || null;
+        const l3Rows = l2Node && Array.isArray(l2Node.children) ? l2Node.children : [];
+        const selectedL3 = String(target.unit_l3 || (metaUnitL3Input ? metaUnitL3Input.value : "") || "").trim();
+        const l3Entries = l3Rows.map((node) => ({
+          value: String(node.label || ""),
+          label: String(node.label || ""),
+        }));
+        setSelectOptions(metaUnitL3Input, l3Entries, selectedL3);
+      };
+
+      const closeMetaEditor = () => {
+        editingProblemId = "";
+        if (metaEditorBackdrop) {
+          metaEditorBackdrop.classList.remove("open");
+          metaEditorBackdrop.setAttribute("aria-hidden", "true");
+        }
+      };
+
+      const upsertProblemMetaRow = (row) => {
+        if (!row || !row.id) return;
+        problemMetaById.set(row.id, row);
+        const idx = problemMeta.findIndex((item) => item.id === row.id);
+        if (idx >= 0) {
+          problemMeta[idx] = row;
+        } else {
+          problemMeta.push(row);
+        }
+      };
+
+      const refreshManualListPreservingState = (focusId = "") => {
+        const orderIds = getManualListIds();
+        const checkedIds = getManualCheckedIds();
+        renderManualOrderList(orderIds, { checkedIds, defaultChecked: false });
+        if (focusId) {
+          selectManualOrderItem(focusId);
+          const target = manualOrderList
+            ? manualOrderList.querySelector(`.manual-order-item[data-id="${focusId}"]`)
+            : null;
+          if (target) target.focus();
+        }
+      };
+
+      const openMetaEditor = async (problemId) => {
+        if (!problemId || !metaEditorBackdrop) return;
+        editingProblemId = problemId;
+        metaEditorBackdrop.classList.add("open");
+        metaEditorBackdrop.setAttribute("aria-hidden", "false");
+        if (metaEditorSubtitle) {
+          metaEditorSubtitle.textContent = problemId;
+        }
+        setMetaEditorStatus("메타정보를 불러오는 중입니다...");
+        if (metaEditorSaveBtn) metaEditorSaveBtn.disabled = true;
+        if (metaEditorDeleteBtn) metaEditorDeleteBtn.disabled = true;
+
+        try {
+          const response = await fetch(`/api/problem-meta?id=${encodeURIComponent(problemId)}`);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const payload = await response.json();
+          const meta = payload && payload.meta ? payload.meta : {};
+
+          if (metaSchoolInput) metaSchoolInput.value = String(meta.school || "");
+          if (metaYearInput) metaYearInput.value = String(meta.year || "");
+          if (metaGradeInput) metaGradeInput.value = String(meta.grade || "");
+          if (metaSemesterInput) metaSemesterInput.value = String(meta.semester || "");
+          if (metaExamInput) metaExamInput.value = String(meta.exam || "");
+          if (metaSubjectInput) {
+            metaSubjectInput.value = normalizeSubjectForSelect(meta.subject, meta.unit_l1);
+          }
+          if (metaSourceNoInput) metaSourceNoInput.value = String(meta.source_question_no || "");
+          if (metaSourceKindInput) metaSourceKindInput.value = String(meta.source_question_kind || "objective");
+          if (metaSourceLabelInput) metaSourceLabelInput.value = String(meta.source_question_label || "");
+          if (metaTypeInput) metaTypeInput.value = String(meta.type || "");
+          if (metaLevelInput) metaLevelInput.value = String(meta.level || "");
+          if (metaDifficultyInput) metaDifficultyInput.value = String(meta.difficulty || "");
+          syncUnitSelectors({
+            unit_l1: meta.unit_l1,
+            unit_l2: meta.unit_l2,
+            unit_l3: meta.unit_l3,
+          });
+          setMetaEditorStatus("값을 수정한 뒤 저장하세요.");
+        } catch (error) {
+          const message = error && error.message ? error.message : "알 수 없는 오류";
+          setMetaEditorStatus(`메타정보 로드 실패: ${message}`, true);
+        } finally {
+          if (metaEditorSaveBtn) metaEditorSaveBtn.disabled = false;
+          if (metaEditorDeleteBtn) metaEditorDeleteBtn.disabled = false;
+        }
+      };
+
       const globToRegex = (pattern) => {
         const escaped = String(pattern || "")
           .replace(/[.+^${}()|[\]\\]/g, "\\$&")
           .replace(/\*/g, ".*")
           .replace(/\?/g, ".");
         return new RegExp(`^${escaped}$`);
+      };
+
+      const patternCandidates = (row) => {
+        if (!row) return [];
+        const id = String(row.id || "").trim();
+        const school = String(row.school || "").trim();
+        const year = String(row.year || "").trim();
+        const grade = String(row.grade || "").trim();
+        const semester = String(row.semester || "").trim();
+        const exam = String(row.exam || "").trim();
+        const subject = String(row.subject || "").trim();
+        const sourceLabel = String(row.source_label || "").trim();
+        const examToken = `${school}.${year}.G${grade}.S${semester}.${exam}${subject ? `(${subject})` : ""}`;
+        const examTokenDash = `${school}-${year}-G${grade}-S${semester}-${exam}${subject ? `(${subject})` : ""}`;
+        const examTokenSpace = `${school} ${year} G${grade} S${semester} ${exam}${subject ? `(${subject})` : ""}`.trim();
+        const idNoNumber = id.replace(/-\d{3}$/, "");
+        return [id, idNoNumber, examToken, examTokenDash, examTokenSpace, sourceLabel].filter(Boolean);
       };
 
       const getCheckedValues = (name) =>
@@ -824,11 +1219,42 @@
         manualOrderIdsInput.value = ids.join(" ");
       };
 
+      const syncManualSelectedInput = (ids) => {
+        if (!manualSelectedIdsInput) return;
+        manualSelectedIdsInput.value = ids.join(" ");
+      };
+
       const getManualListIds = () => {
         if (!manualOrderList) return [];
         return Array.from(manualOrderList.querySelectorAll(".manual-order-item"))
           .map((node) => node.dataset.id || "")
           .filter(Boolean);
+      };
+
+      const getManualCheckedIds = () => {
+        if (!manualOrderList) return [];
+        return Array.from(
+          manualOrderList.querySelectorAll('.manual-order-item input.manual-order-check[type="checkbox"]:checked')
+        )
+          .map((box) => (box.closest(".manual-order-item")?.dataset.id || "").trim())
+          .filter(Boolean);
+      };
+
+      const syncManualSelectionInputs = () => {
+        const orderIds = getManualListIds();
+        const selectedIds = getManualCheckedIds();
+        syncManualInput(orderIds);
+        syncManualSelectedInput(selectedIds);
+      };
+
+      const setAllManualChecks = (checked) => {
+        if (!manualOrderList) return;
+        manualOrderList
+          .querySelectorAll('.manual-order-item input.manual-order-check[type="checkbox"]')
+          .forEach((box) => {
+            box.checked = !!checked;
+          });
+        syncManualSelectionInputs();
       };
 
       const escapeHtml = (raw) =>
@@ -838,6 +1264,21 @@
           .replace(/>/g, "&gt;")
           .replace(/"/g, "&quot;")
           .replace(/'/g, "&#39;");
+
+      const stripCurriculumSuffix = (raw) =>
+        String(raw || "")
+          .replace(/\s*\(2022개정\)\s*/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+
+      const displayUnitPath = (raw) => {
+        const token = String(raw || "").trim();
+        if (!token) return "";
+        return token
+          .split(">")
+          .map((part) => stripCurriculumSuffix(part))
+          .join(">");
+      };
 
       const setPreviewEmpty = (message, subtitle = "문항을 선택하면 미리보기가 표시됩니다.") => {
         if (manualPreviewTitle) manualPreviewTitle.textContent = "문항 미리보기";
@@ -850,13 +1291,14 @@
       const buildPreviewSubtitle = (problemId) => {
         const row = problemMetaById.get(problemId);
         if (!row) return problemId;
-        const examInfo = `${row.school} ${row.year} G${row.grade} S${row.semester} ${row.exam}`;
+        const subject = String(row.subject || "").trim();
+        const examInfo = `${row.school} ${row.year} G${row.grade} S${row.semester} ${row.exam}${subject ? `(${subject})` : ""}`;
         const pieces = [examInfo];
         if (row.source_label) {
           pieces.push(`기출번호 ${row.source_label}`);
         }
         if (row.unit) {
-          pieces.push(row.unit);
+          pieces.push(displayUnitPath(row.unit));
         }
         return pieces.join(" | ");
       };
@@ -868,6 +1310,8 @@
 
         const questionHtml = String((payload && payload.question_html) || "").trim();
         const choicesHtml = String((payload && payload.choices_html) || "").trim();
+        const answerHtml = String((payload && payload.answer_html) || "").trim();
+        const solutionHtml = String((payload && payload.solution_html) || "").trim();
         const blocks = [
           `
             <section class="manual-preview-block">
@@ -884,6 +1328,20 @@
             </section>
           `);
         }
+        if (answerHtml) {
+          blocks.push(`
+            <section class="manual-preview-block">
+              <div class="manual-preview-label">정답</div>
+              ${answerHtml}
+            </section>
+          `);
+        }
+        blocks.push(`
+          <section class="manual-preview-block">
+            <div class="manual-preview-label">해설</div>
+            ${solutionHtml || '<p class="manual-preview-empty">해설 본문이 비어 있습니다.</p>'}
+          </section>
+        `);
 
         manualPreviewContent.innerHTML = blocks.join("");
         if (window.MathJax && typeof window.MathJax.typesetPromise === "function") {
@@ -952,8 +1410,15 @@
         loadProblemPreview(selectedManualOrderId);
       };
 
-      const renderManualOrderList = (ids) => {
+      const renderManualOrderList = (ids, options = {}) => {
         if (!manualOrderList) return;
+        const hadExistingItems = manualOrderList.querySelectorAll(".manual-order-item").length > 0;
+        const explicitCheckedIds = Array.isArray(options.checkedIds) ? uniqueIds(options.checkedIds) : null;
+        let checkedSet = explicitCheckedIds ? new Set(explicitCheckedIds) : new Set(getManualCheckedIds());
+        if (!hadExistingItems && checkedSet.size === 0 && options.defaultChecked !== false) {
+          checkedSet = new Set(ids);
+        }
+
         manualOrderList.setAttribute("role", "listbox");
         manualOrderList.innerHTML = "";
         if (selectedManualOrderId && !ids.includes(selectedManualOrderId)) {
@@ -965,6 +1430,8 @@
           empty.className = "muted";
           empty.textContent = "정렬할 문항 목록이 없습니다. '필터 결과 불러오기'를 눌러주세요.";
           manualOrderList.appendChild(empty);
+          syncManualInput([]);
+          syncManualSelectedInput([]);
           setPreviewEmpty(defaultPreviewMessage);
           return;
         }
@@ -973,9 +1440,9 @@
         ids.forEach((id, index) => {
           const row = problemMetaById.get(id);
           const examLabel = row
-            ? `${row.school} ${row.year} G${row.grade} S${row.semester} ${row.exam} ${row.source_label || ""}`
+            ? `${row.school} ${row.year} G${row.grade} S${row.semester} ${row.exam}${String(row.subject || "").trim() ? `(${String(row.subject || "").trim()})` : ""} ${row.source_label || ""}`
             : "메타정보 없음";
-          const unitLabel = row && row.unit ? row.unit : "";
+          const unitLabel = row && row.unit ? displayUnitPath(row.unit) : "";
 
           const item = document.createElement("li");
           item.className = "manual-order-item";
@@ -985,10 +1452,33 @@
           item.setAttribute("role", "option");
           item.setAttribute("aria-selected", "false");
           item.innerHTML = `
+            <input class="manual-order-check" type="checkbox" aria-label="출제 선택" ${checkedSet.has(id) ? "checked" : ""} />
             <span class="manual-order-handle">${index + 1}.</span>
             <span class="manual-order-id">${id}</span>
             <span class="manual-order-meta">${examLabel}${unitLabel ? ` | ${unitLabel}` : ""}</span>
+            <button class="btn manual-order-edit" type="button" data-edit-id="${id}">수정</button>
           `;
+
+          const checkBox = item.querySelector(".manual-order-check");
+          if (checkBox) {
+            checkBox.setAttribute("draggable", "false");
+            checkBox.addEventListener("click", (event) => {
+              event.stopPropagation();
+            });
+            checkBox.addEventListener("change", () => {
+              syncManualSelectionInputs();
+            });
+          }
+
+          const editButton = item.querySelector(".manual-order-edit");
+          if (editButton) {
+            editButton.setAttribute("draggable", "false");
+            editButton.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              openMetaEditor(id);
+            });
+          }
 
           item.addEventListener("click", () => {
             selectManualOrderItem(id);
@@ -1047,20 +1537,21 @@
             const fromId =
               draggingId || (event.dataTransfer ? event.dataTransfer.getData("text/plain") : "");
             if (!fromId || fromId === id) return;
+            const checkedIds = getManualCheckedIds();
             const current = getManualListIds();
             const fromIndex = current.indexOf(fromId);
             const toIndex = current.indexOf(id);
             if (fromIndex < 0 || toIndex < 0) return;
             const [moved] = current.splice(fromIndex, 1);
             current.splice(toIndex, 0, moved);
-            syncManualInput(current);
-            renderManualOrderList(current);
+            renderManualOrderList(current, { checkedIds, defaultChecked: false });
           });
 
           manualOrderList.appendChild(item);
         });
 
         applyManualSelectionState();
+        syncManualSelectionInputs();
       };
 
       const collectFilteredProblemIds = () => {
@@ -1097,7 +1588,7 @@
         }
 
         if (patternRegex) {
-          rows = rows.filter((row) => patternRegex.test(row.id));
+          rows = rows.filter((row) => patternCandidates(row).some((token) => patternRegex.test(token)));
         }
 
         const sortField = sortFieldInput ? sortFieldInput.value : "default";
@@ -1110,11 +1601,12 @@
             const grade = toInt(row.grade, 99);
             const semester = toInt(row.semester, 99);
             const exam = String(row.exam || "").trim();
+            const subject = String(row.subject || "").trim();
             const unit = String(row.unit || "").trim();
             const number = toInt(row.number, 999);
-            if (sortField === "unit") return [unit, school, year, grade, semester, exam, number, row.id];
-            if (sortField === "school") return [school, year, grade, semester, exam, unit, number, row.id];
-            if (sortField === "year") return [year, school, grade, semester, exam, unit, number, row.id];
+            if (sortField === "unit") return [unit, school, year, grade, semester, exam, subject, number, row.id];
+            if (sortField === "school") return [school, year, grade, semester, exam, subject, unit, number, row.id];
+            if (sortField === "year") return [year, school, grade, semester, exam, subject, unit, number, row.id];
             return [row.id];
           };
           rows.sort((a, b) => {
@@ -1151,8 +1643,7 @@
       if (loadFilteredOrderBtn) {
         loadFilteredOrderBtn.addEventListener("click", () => {
           const ids = collectFilteredProblemIds();
-          syncManualInput(ids);
-          renderManualOrderList(ids);
+          renderManualOrderList(ids, { checkedIds: ids, defaultChecked: true });
           if (sortFieldInput) sortFieldInput.value = "manual";
           refreshSortControls();
         });
@@ -1161,13 +1652,178 @@
       if (clearManualOrderBtn) {
         clearManualOrderBtn.addEventListener("click", () => {
           syncManualInput([]);
+          syncManualSelectedInput([]);
           selectedManualOrderId = "";
           renderManualOrderList([]);
         });
       }
 
+      if (manualCheckAllBtn) {
+        manualCheckAllBtn.addEventListener("click", () => {
+          setAllManualChecks(true);
+        });
+      }
+
+      if (manualUncheckAllBtn) {
+        manualUncheckAllBtn.addEventListener("click", () => {
+          setAllManualChecks(false);
+        });
+      }
+
+      if (renderForm) {
+        renderForm.addEventListener("submit", () => {
+          syncManualSelectionInputs();
+        });
+      }
+
+      if (metaUnitL1Input) {
+        metaUnitL1Input.addEventListener("change", () => {
+          syncUnitSelectors({
+            unit_l1: metaUnitL1Input.value,
+          });
+        });
+      }
+      if (metaUnitL2Input) {
+        metaUnitL2Input.addEventListener("change", () => {
+          syncUnitSelectors({
+            unit_l1: metaUnitL1Input ? metaUnitL1Input.value : "",
+            unit_l2: metaUnitL2Input.value,
+          });
+        });
+      }
+
+      if (metaEditorCancelBtn) {
+        metaEditorCancelBtn.addEventListener("click", () => {
+          closeMetaEditor();
+        });
+      }
+      if (metaEditorBackdrop) {
+        metaEditorBackdrop.addEventListener("click", (event) => {
+          if (event.target === metaEditorBackdrop) {
+            closeMetaEditor();
+          }
+        });
+      }
+
+      const removeProblemMetaRow = (problemId) => {
+        if (!problemId) return;
+        problemMetaById.delete(problemId);
+        const idx = problemMeta.findIndex((item) => item.id === problemId);
+        if (idx >= 0) {
+          problemMeta.splice(idx, 1);
+        }
+      };
+
+      if (metaEditorDeleteBtn) {
+        metaEditorDeleteBtn.addEventListener("click", async () => {
+          if (!editingProblemId) return;
+          const targetId = editingProblemId;
+          const agreed = window.confirm("이 문항이 DB에서 삭제됩니다. 실행하시겠습니까?");
+          if (!agreed) return;
+
+          metaEditorDeleteBtn.disabled = true;
+          if (metaEditorSaveBtn) metaEditorSaveBtn.disabled = true;
+          setMetaEditorStatus("삭제 중입니다...");
+
+          try {
+            const response = await fetch("/api/problem-delete", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ id: targetId }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              const detail = payload && payload.detail ? payload.detail : `HTTP ${response.status}`;
+              throw new Error(detail);
+            }
+
+            removeProblemMetaRow(targetId);
+            previewCache.delete(targetId);
+
+            const orderIds = getManualListIds().filter((id) => id !== targetId);
+            const checkedIds = getManualCheckedIds().filter((id) => id !== targetId);
+            renderManualOrderList(orderIds, { checkedIds, defaultChecked: false });
+            closeMetaEditor();
+          } catch (error) {
+            const message = error && error.message ? error.message : "알 수 없는 오류";
+            setMetaEditorStatus(`삭제 실패: ${message}`, true);
+          } finally {
+            metaEditorDeleteBtn.disabled = false;
+            if (metaEditorSaveBtn) metaEditorSaveBtn.disabled = false;
+          }
+        });
+      }
+
+      if (metaEditorSaveBtn) {
+        metaEditorSaveBtn.addEventListener("click", async () => {
+          if (!editingProblemId) return;
+          metaEditorSaveBtn.disabled = true;
+          setMetaEditorStatus("저장 중입니다...");
+
+          const body = {
+            id: editingProblemId,
+            school: metaSchoolInput ? metaSchoolInput.value : "",
+            year: metaYearInput ? metaYearInput.value : "",
+            grade: metaGradeInput ? metaGradeInput.value : "",
+            semester: metaSemesterInput ? metaSemesterInput.value : "",
+            exam: metaExamInput ? metaExamInput.value : "",
+            subject: metaSubjectInput ? metaSubjectInput.value : "",
+            source_question_no: metaSourceNoInput ? metaSourceNoInput.value : "",
+            source_question_kind: metaSourceKindInput ? metaSourceKindInput.value : "",
+            source_question_label: metaSourceLabelInput ? metaSourceLabelInput.value : "",
+            type: metaTypeInput ? metaTypeInput.value : "",
+            level: metaLevelInput ? metaLevelInput.value : "",
+            difficulty: metaDifficultyInput ? metaDifficultyInput.value : "",
+            unit_l1: metaUnitL1Input ? metaUnitL1Input.value : "",
+            unit_l2: metaUnitL2Input ? metaUnitL2Input.value : "",
+            unit_l3: metaUnitL3Input ? metaUnitL3Input.value : "",
+          };
+
+          if (!SUBJECT_SET.has(String(body.subject || "").trim())) {
+            setMetaEditorStatus("subject를 선택하세요.", true);
+            metaEditorSaveBtn.disabled = false;
+            return;
+          }
+
+          try {
+            const response = await fetch("/api/problem-meta", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(body),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              const detail = payload && payload.detail ? payload.detail : `HTTP ${response.status}`;
+              throw new Error(detail);
+            }
+            const row = payload && payload.row ? payload.row : null;
+            if (row && row.id) {
+              upsertProblemMetaRow(row);
+            }
+            previewCache.delete(editingProblemId);
+            refreshManualListPreservingState(editingProblemId);
+            setMetaEditorStatus("저장 완료");
+            setTimeout(() => {
+              closeMetaEditor();
+            }, 150);
+          } catch (error) {
+            const message = error && error.message ? error.message : "알 수 없는 오류";
+            setMetaEditorStatus(`저장 실패: ${message}`, true);
+          } finally {
+            metaEditorSaveBtn.disabled = false;
+          }
+        });
+      }
+
       setPreviewEmpty(defaultPreviewMessage);
-      renderManualOrderList(uniqueIds(parseIds(manualOrderIdsInput ? manualOrderIdsInput.value : "")));
+      const initialManualOrderIds = uniqueIds(parseIds(manualOrderIdsInput ? manualOrderIdsInput.value : ""));
+      const initialManualSelectedIds = uniqueIds(parseIds(manualSelectedIdsInput ? manualSelectedIdsInput.value : ""));
+      const initialCheckedIds = initialManualSelectedIds.length ? initialManualSelectedIds : initialManualOrderIds;
+      renderManualOrderList(initialManualOrderIds, { checkedIds: initialCheckedIds, defaultChecked: true });
 
     })();
   </script>

@@ -25,7 +25,7 @@ IMG_TAG_RE = re.compile(
 RAW_ORIGINAL_MARKER = "assets/original/"
 MATH_PLACEHOLDER_RE = re.compile(r"@@MATH_BLOCK_(\d+)@@")
 MATH_SEGMENT_RE = re.compile(
-    r"(\$\$.*?\$\$|\\\[.*?\\\]|\\\(.*?\\\)|\$(?:\\.|[^$\n\\])+\$)",
+    r"(\$\$.*?\$\$|\\\[.*?\\\]|\\\(.*?\\\)|\$(?:\\.|[^$\\])+\$)",
     re.DOTALL,
 )
 CURRICULUM_SUFFIX_RE = re.compile(r"\s*\(2022개정\)\s*")
@@ -51,7 +51,7 @@ class ExamLayout:
 
 
 PROBLEM_ID_RE = re.compile(
-    r"^(?P<school>[^-]+)-(?P<year>\d{4})-G(?P<grade>\d+)-S(?P<semester>\d+)-(?P<exam>[^-]+)-(?P<number>\d{3})$"
+    r"^(?P<school>[^-]+)-(?P<year>\d{4})-G(?P<grade>\d+)-S(?P<semester>\d+)-(?P<exam>[^-]+)(?:-(?P<subject>[^-]+))?-(?P<number>\d{3})$"
 )
 SOURCE_NO_TAG_RE = re.compile(r"異쒖젣踰덊샇-(\d+)")
 
@@ -392,6 +392,7 @@ def _build_source_info(problem: ParsedProblem) -> str:
     grade = str(front.get("grade") or from_id.get("grade") or "").strip()
     semester = str(front.get("semester") or from_id.get("semester") or "").strip()
     exam = str(front.get("exam") or from_id.get("exam") or "").strip().upper()
+    subject = str(front.get("subject") or from_id.get("subject") or "").strip()
     source_label = _extract_source_question_label(front, str(from_id.get("number", "")))
 
     unit_path = _extract_unit_path(front).replace(" > ", ">")
@@ -407,6 +408,8 @@ def _build_source_info(problem: ParsedProblem) -> str:
         parts.append(f"S{semester}")
     if exam:
         parts.append(exam)
+    if subject:
+        parts.append(subject)
     if source_label:
         parts.append(f"출제번호 {source_label}")
     if unit_path:
@@ -439,6 +442,7 @@ def _build_source_header_meta(problem: ParsedProblem) -> Dict[str, str]:
     grade = str(front.get("grade") or from_id.get("grade") or "").strip()
     semester = str(front.get("semester") or from_id.get("semester") or "").strip()
     exam = str(front.get("exam") or from_id.get("exam") or "").strip().upper()
+    subject = str(front.get("subject") or from_id.get("subject") or "").strip()
     source_label = _extract_source_question_label(front, str(from_id.get("number", "")))
 
     exam_parts: List[str] = []
@@ -452,6 +456,8 @@ def _build_source_header_meta(problem: ParsedProblem) -> Dict[str, str]:
         exam_parts.append(f"S{semester}")
     if exam:
         exam_parts.append(exam)
+    if subject:
+        exam_parts.append(subject)
     if source_label:
         exam_parts.append(str(source_label))
 

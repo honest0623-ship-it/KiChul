@@ -5,7 +5,7 @@ Read this first before making changes.
 
 ## 1) Project Summary
 
-- Current project scope: render exam PDFs from existing markdown DB entries.
+- Current project scope: render exam PDFs from existing markdown DB entries and edit per-problem metadata in web admin.
 - Web app role: filter/select problems and call `build_exam.py`.
 - Ingest/upload/auto-DB-generation workflows were removed on 2026-03-04.
 
@@ -25,7 +25,7 @@ python app.py
 ## 3) Key Files
 
 - `app.py`: Flask web UI for filtering/selecting problems and PDF generation.
-- `templates/admin.html`: Web admin page (render-only controls).
+- `templates/admin.html`: Web admin page (render controls + per-problem metadata edit UI).
 - `build_exam.py`: CLI entry point for exam/answer/solution PDF generation.
 - `parser.py`: Parses `problem.md` (front-matter + sections).
 - `renderer.py`: HTML/MathJax render and Playwright PDF output.
@@ -41,6 +41,16 @@ python app.py
 4. Run `build_exam.py` as subprocess with selected IDs.
 5. Save output PDF in `output/`.
 6. Optionally generate answer/solution sheets and append to the main output.
+
+### 4.2 Problem metadata edit (`GET/POST /api/problem-meta`, `POST /api/problem-delete`)
+
+1. Select problem from filtered manual-order list.
+2. Open metadata editor modal from the row's `수정` button.
+3. Update source metadata (`school/year/grade/semester/exam/subject/source info`) and unit triplet (`unit_l1/l2/l3`).
+4. Save to rewrite front-matter in the target `problem.md`.
+5. UI metadata cache is refreshed so filtering/sorting uses updated values.
+6. Optional delete action removes the entire target problem folder from `db/problems`.
+7. Subject values are normalized to subject codes (`COM1/COM2/ALG/CAL1/STAT`) when scanning/saving.
 
 ## 5) `problem.md` Shape
 

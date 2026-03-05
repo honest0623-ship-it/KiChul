@@ -128,10 +128,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show inline answer under each problem in exam PDF (교사용 출력).",
     )
+    parser.add_argument(
+        "--skip-exam",
+        action="store_true",
+        help="Skip main exam PDF rendering and generate only selected sheets.",
+    )
     return parser
 
 
-def _merge_pdfs(out_pdf: Path, append_paths: List[Path]) -> None:
+def _merge_pdfs(out_pdf: Path, append_paths: List[Path], include_out_pdf: bool = True) -> None:
     try:
         from pypdf import PdfReader, PdfWriter
     except ImportError as exc:  # pragma: no cover - runtime dependency
@@ -140,7 +145,14 @@ def _merge_pdfs(out_pdf: Path, append_paths: List[Path]) -> None:
         ) from exc
 
     writer = PdfWriter()
-    for source in [out_pdf, *append_paths]:
+    sources: List[Path] = []
+    if include_out_pdf:
+        sources.append(out_pdf)
+    sources.extend(append_paths)
+    if not sources:
+        raise RuntimeError("No PDF sources were provided for merge.")
+
+    for source in sources:
         reader = PdfReader(str(source))
         for page in reader.pages:
             writer.add_page(page)
@@ -278,22 +290,29 @@ def main() -> int:
             print(f"[WARN] {warning}", file=sys.stderr)
         return 1
 
-    try:
-        render_exam_pdf(
-            problems=parsed,
-            out_pdf=out_pdf,
-            template_path=template_path,
-            mathjax_bundle=mathjax_bundle,
-            layout=layout,
-            warnings=warnings,
-        )
-    except Exception as exc:  # pylint: disable=broad-except
-        print(f"[ERROR] Failed to render exam PDF: {exc}", file=sys.stderr)
-        for warning in warnings:
-            print(f"[WARN] {warning}", file=sys.stderr)
+    if args.skip_exam and not (answer_sheet_path or solution_sheet_path):
+        print("[ERROR] --skip-exam requires --answer-sheet and/or --solution-sheet.", file=sys.stderr)
         return 1
 
-    print(f"Exam PDF: {out_pdf.resolve()}")
+    if not args.skip_exam:
+        try:
+            render_exam_pdf(
+                problems=parsed,
+                out_pdf=out_pdf,
+                template_path=template_path,
+                mathjax_bundle=mathjax_bundle,
+                layout=layout,
+                warnings=warnings,
+            )
+        except Exception as exc:  # pylint: disable=broad-except
+            print(f"[ERROR] Failed to render exam PDF: {exc}", file=sys.stderr)
+            for warning in warnings:
+                print(f"[WARN] {warning}", file=sys.stderr)
+            return 1
+
+        print(f"Exam PDF: {out_pdf.resolve()}")
+    else:
+        print("Exam PDF generation skipped (--skip-exam).")
 
     appended_paths: List[Path] = []
     temp_sheet_paths: List[Path] = []
@@ -356,8 +375,15 @@ def main() -> int:
 
     if args.append_sheets_to_out and appended_paths:
         try:
-            _merge_pdfs(out_pdf=out_pdf, append_paths=appended_paths)
-            print(f"Merged PDF (exam + selected sheets): {out_pdf.resolve()}")
+            if args.skip_exam:
+                if len(appended_paths) == 1:
+                    appended_paths[0].replace(out_pdf)
+                else:
+                    _merge_pdfs(out_pdf=out_pdf, append_paths=appended_paths, include_out_pdf=False)
+                print(f"Merged PDF (selected sheets): {out_pdf.resolve()}")
+            else:
+                _merge_pdfs(out_pdf=out_pdf, append_paths=appended_paths, include_out_pdf=True)
+                print(f"Merged PDF (exam + selected sheets): {out_pdf.resolve()}")
         except Exception as exc:  # pylint: disable=broad-except
             print(f"[ERROR] Failed to merge PDFs: {exc}", file=sys.stderr)
             for warning in warnings:
