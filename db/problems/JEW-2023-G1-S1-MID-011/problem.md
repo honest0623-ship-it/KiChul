@@ -29,7 +29,7 @@ assets:
 연립방정식
 \[
 \begin{cases}
-x+y=k\\
+x+y=k \\
 x^2+y^2=4
 \end{cases}
 \]
@@ -72,3 +72,5 @@ x+y=k
 k=2\sqrt{2}.
 \]
 정답은 ⑤이다.
+
+따라서 정답은 ⑤이다.

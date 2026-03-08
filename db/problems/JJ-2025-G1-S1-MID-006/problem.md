@@ -12,10 +12,10 @@ source_question_kind: objective
 source_question_label: '6'
 difficulty: 3
 level: 3
-unit: 공통수학1(2022개정)>1. 다항식>1-1. 다항식의 연산
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-1. 복소수와 이차방정식
 unit_l1: 공통수학1(2022개정)
-unit_l2: 1. 다항식
-unit_l3: 1-1. 다항식의 연산
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-1. 복소수와 이차방정식
 source: user_upload_2026-03-05
 tags:
 - 수동작성
@@ -26,7 +26,6 @@ assets:
 - assets/original/
 - assets/original/JJ.2025.G1.S1.MID.COM1.pdf
 ---
-
 ## Q
 $\dfrac{2+3i}{i-1}$의 값을 $a+bi$라 할 때, $a+b$의 값은? (단, $a,b$는 실수)
 

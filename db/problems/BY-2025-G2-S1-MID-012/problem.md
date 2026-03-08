@@ -8,24 +8,24 @@ exam: MID
 type: 객관식
 source_question_no: 12
 source_question_kind: objective
-source_question_label: "12"
+source_question_label: '12'
 difficulty: 4
 level: 4
-unit: "대수(2022개정)>1. 지수함수와 로그함수>1-2. 지수함수"
-unit_l1: "대수(2022개정)"
-unit_l2: "1. 지수함수와 로그함수"
-unit_l3: "1-2. 지수함수"
-source: "user_upload_2026-03-03"
+unit: 대수(2022개정)>1. 지수함수와 로그함수>1-1. 지수와 로그
+unit_l1: 대수(2022개정)
+unit_l2: 1. 지수함수와 로그함수
+unit_l3: 1-1. 지수와 로그
+source: user_upload_2026-03-03
 tags:
-  - 자동입력
-  - 객관식
-  - 출제번호-12
-  - OCR
-  - AI
+- 자동입력
+- 객관식
+- 출제번호-12
+- OCR
+- AI
 assets:
-  # Raw source image archive.
-  - assets/original/
-  - assets/original/012_1-2. 지수함수_2.png
+- assets/original/
+- assets/original/012_1-2. 지수함수_2.png
+subject: ALG
 ---
 
 ## Q

@@ -9,7 +9,7 @@ subject: CAL1
 type: 객관식
 source_question_no: 13
 source_question_kind: objective
-source_question_label: '13'
+source_question_label: 13
 difficulty: 3
 level: 3
 unit: 미적분 I(2022개정)>1. 함수의 극한과 연속>1-1. 함수의 극한

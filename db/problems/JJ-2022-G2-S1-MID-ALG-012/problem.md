@@ -12,10 +12,10 @@ source_question_kind: objective
 source_question_label: '12'
 difficulty: 3
 level: 3
-unit: 대수(2022개정)>2. 삼각함수>2-2. 삼각함수의 그래프
+unit: 대수(2022개정)>2. 삼각함수>2-1. 삼각함수
 unit_l1: 대수(2022개정)
 unit_l2: 2. 삼각함수
-unit_l3: 2-2. 삼각함수의 그래프
+unit_l3: 2-1. 삼각함수
 source: user_upload_2026-03-06
 tags:
 - 수동생성

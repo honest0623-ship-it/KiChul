@@ -9,13 +9,13 @@ subject: CAL1
 type: 객관식
 source_question_no: 14
 source_question_kind: objective
-source_question_label: '14'
+source_question_label: 14
 difficulty: 3
 level: 3
-unit: 미적분 I(2022개정)>1. 함수의 극한과 연속>1-2. 함수의 연속
+unit: 미적분 I(2022개정)>1. 함수의 극한과 연속>1-1. 함수의 극한
 unit_l1: 미적분 I(2022개정)
 unit_l2: 1. 함수의 극한과 연속
-unit_l3: 1-2. 함수의 연속
+unit_l3: 1-1. 함수의 극한
 source: user_upload_2026-03-06
 tags:
 - 수동작성

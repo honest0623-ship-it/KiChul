@@ -12,10 +12,10 @@ source_question_kind: objective
 source_question_label: '5'
 difficulty: 3
 level: 3
-unit: 대수(2022개정)>1. 지수함수와 로그함수>1-2. 지수함수
+unit: 대수(2022개정)>1. 지수함수와 로그함수>1-1. 지수와 로그
 unit_l1: 대수(2022개정)
 unit_l2: 1. 지수함수와 로그함수
-unit_l3: 1-2. 지수함수
+unit_l3: 1-1. 지수와 로그
 source: user_upload_2026-03-06
 tags:
 - 수동생성

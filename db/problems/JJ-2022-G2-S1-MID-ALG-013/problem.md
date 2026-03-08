@@ -33,7 +33,7 @@ assets:
 ## Q
 다음 그림과 같이 함수 $y=\sin\dfrac{\pi}{8}x$의 그래프와 $x$축으로 둘러싸인 부분에 직사각형 $ABCD$가 내접하고 있다. $\overline{BC}=4$일 때, 직사각형 $ABCD$의 넓이는?
 
-<img src="assets/scan.png" alt="JJ-2022-G2-S1-MID-ALG-013 graph" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="JJ-2022-G2-S1-MID-ALG-013 graph" style="width:80% !important; max-width:80% !important; height:auto;" />
 
 ## Choices
 ① $2$

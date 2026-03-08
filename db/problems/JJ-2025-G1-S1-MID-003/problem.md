@@ -26,7 +26,6 @@ assets:
 - assets/original/
 - assets/original/JJ.2025.G1.S1.MID.COM1.pdf
 ---
-
 ## Q
 실수 $x, y$에 대하여 $x+y=5$, $x^2+xy+y^2=24$일 때, $x^3+y^3$의 값은?
 

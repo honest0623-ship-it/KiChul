@@ -12,10 +12,10 @@ source_question_kind: objective
 source_question_label: '12'
 difficulty: 3
 level: 3
-unit: 공통수학1(2022개정)>1. 다항식>1-2. 나머지정리
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-1. 복소수와 이차방정식
 unit_l1: 공통수학1(2022개정)
-unit_l2: 1. 다항식
-unit_l3: 1-2. 나머지정리
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-1. 복소수와 이차방정식
 source: user_upload_2026-03-05
 tags:
 - 수동작성
@@ -26,7 +26,6 @@ assets:
 - assets/original/
 - assets/original/JJ.2025.G1.S1.MID.COM1.pdf
 ---
-
 ## Q
 이차방정식 $f(x)=0$의 두 근의 합이 4일 때, 이차방정식 $f(2x-5)=0$의 두 근의 합을 구하면?
 

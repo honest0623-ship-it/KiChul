@@ -9,19 +9,21 @@ type: 객관식
 source_question_no: 11
 source_question_kind: objective
 source_question_label: '11'
-difficulty: '3'
+difficulty: 3
 level: 3
-unit: 대수(2022개정)>1. 지수함수와 로그함수>1-1. 지수와 로그
+unit: 대수(2022개정)>1. 지수함수와 로그함수>1-3. 로그함수
 unit_l1: 대수(2022개정)
 unit_l2: 1. 지수함수와 로그함수
-unit_l3: 1-1. 지수와 로그
+unit_l3: 1-3. 로그함수
 source: user_upload_2026-03-01
 tags:
 - 객관식
 - 출제번호-11
 assets:
 - assets/original/011_1-1. 지수와 로그.png
+subject: ALG
 ---
+
 ## Q
 어떤 물고기는 바다 수면에 비치는 햇빛의 양이 $27\%$ 이상 도달하는 깊이까지 살 수 있다고 한다. 어떤 지역에서 햇빛이 수면으로부터 $30\mathrm{m}$씩 내려갈 때마다 햇빛의 양이 $37\%$씩 감소된다고 할 때, 이 물고기가 살 수 있는 깊이는 최대 몇 $\mathrm{m}$인가?
 (단, $\log 6.3 = 0.8$, $\log 2.7 = 0.4$로 계산한다.)

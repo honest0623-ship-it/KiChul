@@ -27,12 +27,15 @@ assets:
   # Raw source image archive.
   - assets/original/
   - assets/original/서답6번_2-3. 여러 가지 방정식.png
+  - assets/original/서답6번_2-3. 여러 가지 방정식_scan.png
 ---
 
 ## Q
-오른쪽 그림과 같이 넓이가 $1500\text{m}^2$인 직사각형 모양의 수영장이 있다. 이 수영장의 대각선의 길이가 $10\sqrt{34}\text{m}$일 때, 이 수영장의 가로, 세로의 길이를 구하는 과정과 답을 쓰시오. (단 가로의 길이가 세로의 길이보다 더 길다.)
+오른쪽 그림과 같은 직사각형 모양의 수영장이 있다.
+이 수영장의 넓이가 \(1500\text{m}^2\)이고 대각선의 길이가 \(10\sqrt{34}\text{m}\)일 때,
+가로와 세로의 길이를 각각 구하시오.
 
-<img src="assets/scan.png" style="width: 100%; max-width: 100%;">
+<img src="assets/scan.png" alt="문항 도형" style="width:60% !important; max-width:60% !important; height:auto;" />
 
 ## Choices
 
@@ -82,3 +85,5 @@ y=\frac{(x+y)-(x-y)}{2}=\frac{80-20}{2}=30
 \text{가로 }50\text{m},\ \text{세로 }30\text{m}
 \]
 이다.
+
+따라서 답은 가로 $50\text{m}$, 세로 $30\text{m}$이다.

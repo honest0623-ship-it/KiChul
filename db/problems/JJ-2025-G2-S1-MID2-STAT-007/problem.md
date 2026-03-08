@@ -12,10 +12,10 @@ source_question_kind: objective
 source_question_label: '7'
 difficulty: 3
 level: 3
-unit: 확률과 통계(2022개정)>1. 경우의 수>1-2. 조합
+unit: 확률과 통계(2022개정)>1. 경우의 수>1-1. 순열
 unit_l1: 확률과 통계(2022개정)
 unit_l2: 1. 경우의 수
-unit_l3: 1-2. 조합
+unit_l3: 1-1. 순열
 source: user_upload_2026-03-06
 tags:
 - 수동작성

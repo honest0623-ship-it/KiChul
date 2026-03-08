@@ -26,7 +26,6 @@ assets:
 - assets/original/
 - assets/original/JJ.2025.G1.S1.MID.COM1.pdf
 ---
-
 ## Q
 등식 $\dfrac{z}{i}+3i\overline{z}=-4+2i$를 만족시키는 복소수 $z$의 허수 부분의 값은?
 

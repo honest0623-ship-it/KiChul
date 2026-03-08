@@ -21,18 +21,22 @@ tags:
 - 서술형
 - 출제번호-6
 assets:
+- assets/scan.png
 - assets/original/
 - assets/original/서답6번.png
 ---
 ## Q
-두 행렬 $A=\begin{pmatrix}1 & 2 \cr 2 & 3\end{pmatrix}$, $B=\begin{pmatrix}1 & p \cr q & -1\end{pmatrix}$가 $AB=BA$를 만족시킬 때, $p$와 $q$의 값을 각각 구하시오.
+두 행렬
+\[
+A=\begin{pmatrix}1 & 2 \\ 2 & 3\end{pmatrix},\qquad
+B=\begin{pmatrix}1 & p \\ q & -1\end{pmatrix}
+\]
+에 대하여 \(AB=BA\)일 때, 상수 \(p,\ q\)의 값을 각각 구하시오.
 
 ## Choices
 
-
 ## Answer
 $p=-2,\ q=-2$
-
 ## Solution
 두 곱을 계산하면
 $$
@@ -55,3 +59,28 @@ $$
 p=-2,\ q=-2
 $$
 이다.
+
+따라서 답은 $p=-2,\ q=-2$이다.
+두 곱을 계산하면
+$$
+AB=\begin{pmatrix}1+2q & p-2 \cr 2+3q & 2p-3\end{pmatrix},\qquad
+BA=\begin{pmatrix}1+2p & 2+3p \cr q-2 & 2q-3\end{pmatrix}.
+$$
+$AB=BA$에서 성분 비교하면
+$$
+1+2q=1+2p\Rightarrow q=p,
+$$
+$$
+p-2=2+3p\Rightarrow -4=2p\Rightarrow p=-2.
+$$
+따라서
+$$
+q=-2
+$$
+이고, 최종적으로
+$$
+p=-2,\ q=-2
+$$
+이다.
+
+따라서 답은 $p=-2,\ q=-2$이다.

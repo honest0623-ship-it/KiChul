@@ -26,7 +26,6 @@ assets:
 - assets/original/
 - assets/original/JJ.2025.G1.S1.MID.COM1.pdf
 ---
-
 ## Q
 $(3x+2)(x^2+ax+a)$의 전개식에서 모든 항의 계수의 합이 35일 때, $x$의 계수는?
 

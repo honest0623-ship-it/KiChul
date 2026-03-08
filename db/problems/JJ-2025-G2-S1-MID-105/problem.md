@@ -24,7 +24,7 @@ assets:
 - assets/original/서답5번_1-1. 지수와 로그.png
 ---
 ## Q
-$1$이 아닌 네 양수 $a, b, x, y$가
+\(1\)이 아닌 네 양수 \(a,\ b,\ x,\ y\)가
 \[
 a^x=\left(\frac{b}{a}\right)^y
 \]
@@ -32,7 +32,7 @@ a^x=\left(\frac{b}{a}\right)^y
 \[
 \frac{y}{x+y}
 \]
-를 $a, b$로 나타내시오.
+를 \(a,\ b\)로 나타내시오.
 
 ## Choices
 
@@ -40,7 +40,6 @@ a^x=\left(\frac{b}{a}\right)^y
 \[
 \frac{\log a}{\log b}
 \]
-
 ## Solution
 주어진 식에서
 \[
@@ -61,3 +60,33 @@ a^{x+y}=b^y
 \frac{y}{x+y}=\frac{\log a}{\log b}
 \]
 이다.
+
+따라서 답은 다음과 같다.
+
+\[
+\frac{\log a}{\log b}
+\]
+주어진 식에서
+\[
+a^x=\left(\frac{b}{a}\right)^y=\frac{b^y}{a^y}
+\]
+이므로
+\[
+a^{x+y}=b^y
+\]
+이다.
+양변에 로그를 취하면
+\[
+(x+y)\log a = y\log b
+\]
+이므로
+\[
+\frac{y}{x+y}=\frac{\log a}{\log b}
+\]
+이다.
+
+따라서 답은 다음과 같다.
+
+\[
+\frac{\log a}{\log b}
+\]

@@ -33,7 +33,7 @@ assets:
 \(\overline{AB}=6\)이고 삼각형 \(ABC\)의 넓이가 \(21\)일 때, \(abc\)의 값은?
 (단, \(a,\ b,\ c\)는 상수이고 점 \(A\)의 \(x\)좌표는 점 \(B\)의 \(x\)좌표보다 작다.)
 
-<img src="assets/scan.png" alt="problem-017-figure" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="문항 도형" style="width:60% !important; max-width:60% !important; height:auto;" />
 
 ## Choices
 ① -28
@@ -96,3 +96,5 @@ b(6+b)=7
 abc=7\cdot 1\cdot(-1)=-7.
 \]
 정답은 ④이다.
+
+따라서 정답은 ④이다.

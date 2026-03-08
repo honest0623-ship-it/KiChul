@@ -22,20 +22,22 @@ tags:
 - 출제번호-7
 - manual-fix
 assets:
+- assets/scan.png
 - assets/original/
 - assets/original/007_2-1. 복소수와 이차방정식.png
 ---
 
 ## Q
-오른쪽 그림과 같이 $\overline{AB}=1$, $\overline{AC}=2$, $\angle A=90^\circ$인 직각삼각형에서 꼭짓점 $A$에서 변 $BC$에 내린 수선의 발을 $D$라 하자. $\overline{BD}=\alpha$, $\overline{CD}=\beta$를 두 근으로 하는 이차방정식이 $5x^2+ax+b=0$일 때, 상수 $a,b$에 대하여 $ab$의 값을 구하시오.
+오른쪽 그림과 같이 \(\overline{AB}=1\), \(\overline{AC}=2\), \(\angle A=90^\circ\)인 직각삼각형의 꼭짓점 \(A\)에서 변 \(BC\)에 내린 수선의 발을 \(D\)라 하자. \(\overline{BD}=\alpha\), \(\overline{CD}=\beta\)를 두 근으로 하는 이차방정식이 \(5x^2+ax+b=0\)이라 할 때, 상수 \(a,\ b\)에 대하여 곱 \(ab\)의 값은?
+
+<img src="assets/scan.png" alt="문항 도형" style="width:60% !important; max-width:60% !important; height:auto;" />
 
 ## Choices
-① $-20\sqrt{5}$
-② $-15\sqrt{5}$
-③ $-10\sqrt{5}$
-④ $-5\sqrt{5}$
-⑤ $5\sqrt{5}$
-
+① \(-20\sqrt{5}\)
+② \(-15\sqrt{5}\)
+③ \(-10\sqrt{5}\)
+④ \(-5\sqrt{5}\)
+⑤ \(5\sqrt{5}\)
 ## Answer
 ①
 
@@ -57,3 +59,19 @@ $\frac{b}{5}=\alpha\beta=\frac{4}{5}\Rightarrow b=4$.
 $ab=(-5\sqrt{5})\cdot 4=-20\sqrt{5}$.
 
 정답은 ①이다.
+
+따라서 정답은 ①이다.
+직각삼각형에서 $BC=\sqrt{1^2+2^2}=\sqrt{5}$.
+빗변 위에 내린 수선의 성질에 의해
+$\alpha=BD=\frac{AB^2}{BC}=\frac{1}{\sqrt{5}}$,
+$\beta=CD=\frac{AC^2}{BC}=\frac{4}{\sqrt{5}}$.
+따라서
+$\alpha+\beta=\sqrt{5}$, $\alpha\beta=\frac{4}{5}$.
+이차방정식 $5x^2+ax+b=0$의 두 근이 $\alpha,\beta$이므로
+$-\frac{a}{5}=\alpha+\beta=\sqrt{5}\Rightarrow a=-5\sqrt{5}$,
+$\frac{b}{5}=\alpha\beta=\frac{4}{5}\Rightarrow b=4$.
+따라서
+$ab=(-5\sqrt{5})\cdot 4=-20\sqrt{5}$.
+정답은 ①이다.
+
+따라서 정답은 ①이다.

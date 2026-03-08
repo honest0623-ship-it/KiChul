@@ -20,17 +20,21 @@ tags:
 - 객관식
 - 출제번호-16
 assets:
+- assets/scan.png
 - assets/original/
 - assets/original/016.png
 ---
-## Q
-어느 학교의 학급 대항 퀴즈대회는 국어, 영어, 수학, 사회의 순서로 4개의 라운드로 진행된다. 학급대표 선수 $A,B,C,D,E,F,G$ (7명)을 다음 규칙에 따라 네 라운드에 배정한다.
 
-[규칙1] 모든 선수는 적어도 한 라운드에 배정한다.
+## Q
+어느 학교의 학급 대항 퀴즈대회는 국어, 영어, 수학, 사회의 순서로 4개의 라운드로 경기가 진행된다.
+다음은 학급대표 선수를 네 라운드에 배정하는 규칙이다.
+
+[규칙1] 모든 선수를 적어도 한 라운드에 배정한다.
 [규칙2] 한 라운드에 배정된 선수는 바로 다음 라운드에는 배정될 수 없다.
 [규칙3] 국어에 2명, 영어에 4명, 수학에 2명, 사회에 3명을 배정한다.
 
-같은 라운드에 배정되는 선수들의 순서는 고려하지 않을 때, 가능한 모든 경우의 수는?
+학급대표 선수 \(A,B,C,D,E,F,G\) 7명을 이 규칙에 따라 네 라운드에 배정하는 모든 경우의 수는?
+(단, 같은 라운드에 배정되는 선수들의 순서는 고려하지 않는다.)
 
 ## Choices
 ① 420
@@ -38,42 +42,39 @@ assets:
 ③ 2730
 ④ 3150
 ⑤ 3570
-
 ## Answer
-③
+3
 
 ## Solution
-라운드별 집합을 $S_1,S_2,S_3,S_4$라 두면
-$$
-n(S_1)=2,\quad n(S_2)=4,\quad n(S_3)=2,\quad n(S_4)=3
-$$
-이고,
-$$
-S_1\cap S_2=\varnothing,\quad S_2\cap S_3=\varnothing,\quad S_3\cap S_4=\varnothing
-$$
-이다.
-
-먼저 규칙1을 무시하면
-$$
-{}_{7}\mathrm{C}_{2}\times{}_{5}\mathrm{C}_{4}\times{}_{3}\mathrm{C}_{2}\times{}_{5}\mathrm{C}_{3}=3150
-$$
-이다.
-
-이제 한 선수가 한 번도 배정되지 않는 경우를 뺀다.
-특정 선수 1명을 고정하면 경우의 수는
-$$
-{}_{6}\mathrm{C}_{2}\times{}_{4}\mathrm{C}_{4}\times{}_{2}\mathrm{C}_{2}\times{}_{4}\mathrm{C}_{3}=60
-$$
-이고, 선수는 7명이므로
-$$
-7\times60=420
-$$
-이다.
-
-두 명 이상이 빠지는 경우는 $S_2$의 4명을 채울 수 없어 불가능하다.
-
-따라서 전체 경우의 수는
-$$
-3150-420=2730
-$$
-이다.
+A player can appear only in one of these non-consecutive round patterns:
+\[
+K,\ E,\ M,\ S,\ KM,\ KS,\ ES
+\]
+(where \(K\)=Korean, \(E\)=English, \(M\)=Math, \(S\)=Social Studies).
+Let their counts be \(x_1,\dots,x_7\). Then the round-size conditions become
+\[
+\begin{aligned}
+x_1+x_5+x_6&=2,\\
+x_2+x_7&=4,\\
+x_3+x_5&=2,\\
+x_4+x_6+x_7&=3,\\
+x_1+x_2+x_3+x_4+x_5+x_6+x_7&=7.
+\end{aligned}
+\]
+The nonnegative integer solutions are exactly
+\[
+(0,2,0,1,2,0,2),\ (0,2,1,0,1,1,2),\ (1,1,1,0,1,0,3).
+\]
+Their counts are
+\[
+\frac{7!}{2!1!2!2!}=630,
+\qquad
+\frac{7!}{2!1!1!1!2!}=1260,
+\qquad
+\frac{7!}{1!1!1!1!3!}=840.
+\]
+So the total is
+\[
+630+1260+840=2730.
+\]
+Therefore the correct choice is 3.

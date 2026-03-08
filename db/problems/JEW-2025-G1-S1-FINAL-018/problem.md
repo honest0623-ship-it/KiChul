@@ -20,69 +20,73 @@ tags:
 - 객관식
 - 출제번호-18
 assets:
+- assets/scan.png
 - assets/original/
 - assets/original/018.png
 ---
+
 ## Q
-$x$에 대한 삼차방정식
-$$
+\(x\)에 대한 삼차방정식
+\[
 x^3-(2a+1)x^2+(a^2-a)x+a^2+a+2=0
-$$
-의 서로 다른 세 근을 $\alpha,\beta,\gamma$라 하자. $\alpha^2+\beta^2=10$을 만족하는 모든 실수 $a$값의 합은?
+\]
+의 서로 다른 세 근을 \(\alpha,\ \beta,\ \gamma\)라 하자.
+\(\alpha^2+\beta^2=10\)을 만족하는 모든 실수 \(a\)값의 합은?
 
 ## Choices
 ① 2
 ② 3
 ③ 4
-④ -5
-⑤ -6
-
+④ \(-5\)
+⑤ \(-6\)
 ## Answer
-①
+1
 
 ## Solution
-식은
-$$
-(x+1)\left(x^2-2(a+1)x+a^2+a+2\right)
-$$
-로 인수분해되므로 한 근은 항상 $-1$이다.
+Factor the cubic as
+\[
+x^3-(2a+1)x^2+(a^2-a)x+a^2+a+2
+=(x+1)\bigl(x^2-2(a+1)x+a^2+a+2\bigr).
+\]
+So one root is always \(-1\).
 
-$\alpha^2+\beta^2=10$이 되려면 두 경우를 본다.
+Case 1: \(\alpha,\beta\) are the two roots of the quadratic factor.
+Then
+\[
+\alpha+\beta=2(a+1),
+\qquad
+\alpha\beta=a^2+a+2.
+\]
+Hence
+\[
+\alpha^2+\beta^2=(\alpha+\beta)^2-2\alpha\beta=2a^2+6a.
+\]
+Setting this equal to 10 gives
+\[
+a^2+3a-5=0.
+\]
 
-1) $\alpha,\beta$가 이차식의 두 근인 경우
-$$
-\alpha+\beta=2(a+1),\quad \alpha\beta=a^2+a+2
-$$
-이므로
-$$
-\alpha^2+\beta^2=(\alpha+\beta)^2-2\alpha\beta=2a^2+6a=10
-$$
-즉
-$$
-a^2+3a-5=0
-$$
-이다.
+Case 2: one of \(\alpha,\beta\) is \(-1\).
+Then the other one, say \(t\), satisfies
+\[
+(-1)^2+t^2=10 \Rightarrow t=\pm3.
+\]
+Substituting into the quadratic factor,
+\[
+t=3 \Rightarrow a^2-5a+5=0,
+\qquad
+t=-3 \Rightarrow a^2+7a+17=0.
+\]
+The last equation has no real root.
 
-2) $\alpha,\beta$ 중 하나가 $-1$인 경우
-다른 근을 $t$라 하면
-$$
-1+t^2=10
-$$
-이므로 $t=3$ 또는 $t=-3$이다.
-
-$t=3$을 이차식에 대입하면
-$$
-a^2-5a+5=0
-$$
-이고, $t=-3$은
-$$
-a^2+7a+17=0
-$$
-이라 실수해가 없다.
-
-따라서 가능한 실수 $a$는 $a^2+3a-5=0$, $a^2-5a+5=0$의 실근들이다.
-실근의 합은
-$$
-(-3)+5=2
-$$
-이다.
+Therefore all real values of \(a\) come from
+\[
+a^2+3a-5=0,
+\qquad
+a^2-5a+5=0.
+\]
+The sums of their real roots are \(-3\) and \(5\), so the total sum is
+\[
+-3+5=2.
+\]
+Therefore the correct choice is 1.

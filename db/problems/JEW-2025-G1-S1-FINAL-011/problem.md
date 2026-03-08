@@ -20,11 +20,13 @@ tags:
 - 객관식
 - 출제번호-11
 assets:
+- assets/scan.png
 - assets/original/
 - assets/original/011.png
 ---
+
 ## Q
-삼차방정식 $x^3+ax^2-2ax-8=0$의 실근이 하나가 되도록 하는 정수 $a$의 개수는?
+삼차방정식 \(x^3+ax^2-2ax-8=0\)의 실근이 하나가 되도록 하는 정수 \(a\)의 개수는?
 
 ## Choices
 ① 7개
@@ -32,34 +34,31 @@ assets:
 ③ 9개
 ④ 10개
 ⑤ 11개
-
 ## Answer
-②
+2
 
 ## Solution
-$$
-x^3+ax^2-2ax-8=(x-2)\left(x^2+(a+2)x+4\right)
-$$
-따라서 항상 $x=2$는 실근이다.
-
-이차식의 판별식은
-$$
-D=(a+2)^2-16=(a+6)(a-2)
-$$
-이다.
-
-1) $D<0$이면 이차식 실근이 없으므로 전체 실근은 $x=2$ 하나.
-$$
--6<a<2
-$$
-이므로 $a=-5,-4,-3,-2,-1,0,1$ (7개)
-
-2) $D=0$일 때
-- $a=2$이면 중근 $-2$가 생겨 실근 2개
-- $a=-6$이면 이차식이 $(x-2)^2$가 되어 전체가 $(x-2)^3$, 실근 1개
-
-따라서 가능한 정수 $a$의 개수는
-$$
-7+1=8
-$$
-이다.
+Since
+\[
+2^3+a\cdot2^2-2a\cdot2-8=0,
+\]
+we have \((x-2)\) as a factor:
+\[
+x^3+ax^2-2ax-8=(x-2)(x^2+(a+2)x+4).
+\]
+To have exactly one real root, either the quadratic has no real root, or its double root is the same as \(x=2\).
+Its discriminant is
+\[
+(a+2)^2-16=(a+6)(a-2).
+\]
+If it is negative, then
+\[
+-6<a<2,
+\]
+so there are 7 integers.
+If it is zero, \(a=-6\) or \(a=2\). Only \(a=-6\) gives \((x-2)^3\), which has one real root.
+Therefore the number of integers is
+\[
+7+1=8.
+\]
+So the correct choice is 2.

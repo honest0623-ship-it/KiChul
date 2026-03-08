@@ -1,15 +1,16 @@
----
+﻿---
 id: JJ-2025-G2-S1-MID-012
 school: JJ
 year: 2025
 grade: 2
 semester: 1
 exam: MID
+subject: ALG
 type: 객관식
 source_question_no: 12
 source_question_kind: objective
 source_question_label: '12'
-difficulty: '3'
+difficulty: 3
 level: 3
 unit: 대수(2022개정)>1. 지수함수와 로그함수>1-1. 지수와 로그
 unit_l1: 대수(2022개정)
@@ -24,53 +25,59 @@ assets:
 - assets/original/012_1-1. 지수와 로그.png
 ---
 ## Q
-$x, y, z$는 실수이고 $a$가 1이 아닌 양수라 하자.
-$2^x = 5^y = a^z$이고,
-$\dfrac{1}{z} = \dfrac{1}{x} + \dfrac{1}{y}$를 만족시킬 때, $a$의 값은?
+0이 아닌 실수 $x$에 대하여
+$$
+\frac{2^x+2^{-x}}{2^x-2^{-x}}=\frac{5}{4}
+$$
+일 때, $4^x+4^{-x}$의 값은?
 
 ## Choices
-① $10$
-② $5$
-③ $\dfrac{5}{2}$
-④ $2$
-⑤ $\dfrac{2}{5}$
+① $\dfrac{26}{5}$
+② $\dfrac{37}{6}$
+③ $\dfrac{50}{7}$
+④ $\dfrac{65}{8}$
+⑤ $\dfrac{82}{9}$
 
 ## Answer
-①
+⑤
 
 ## Solution
-$2^x = 5^y = a^z = t\,(t>0)$로 두면
-\[
-x=\log_2 t,\quad y=\log_5 t,\quad z=\log_a t
-\]
+$a=2^x$라 두면 $a>0$이고
+$$
+2^{-x}=\frac{1}{a}
+$$
+이므로 주어진 식은
+$$
+\frac{a+\frac{1}{a}}{a-\frac{1}{a}}=\frac{5}{4}
+$$
 이다.
 
-조건
-\[
-\frac{1}{z}=\frac{1}{x}+\frac{1}{y}
-\]
-에 대입하면
-\[
-\frac{1}{\log_a t}
-=
-\frac{1}{\log_2 t}
-+
-\frac{1}{\log_5 t}
-\]
-\[
-\frac{\log a}{\log t}
-=
-\frac{\log 2}{\log t}
-+
-\frac{\log 5}{\log t}
-\]
-이므로
-\[
-\log a=\log 2+\log 5=\log 10
-\]
+분자와 분모에 $a$를 곱하면
+$$
+\frac{a^2+1}{a^2-1}=\frac{5}{4}
+$$
 이다.
+
+$t=a^2=4^x$라 두면
+$$
+\frac{t+1}{t-1}=\frac{5}{4}
+$$
+이므로
+$$
+4(t+1)=5(t-1)
+$$
+$$
+4t+4=5t-5
+$$
+$$
+t=9
+$$
+이다.
+
 따라서
-\[
-a=10
-\]
-이므로 정답은 ①이다.
+$$
+4^x+4^{-x}=t+\frac{1}{t}=9+\frac{1}{9}=\frac{82}{9}
+$$
+이다.
+
+따라서 정답은 ⑤이다.

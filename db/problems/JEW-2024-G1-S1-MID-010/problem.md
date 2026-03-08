@@ -29,15 +29,14 @@ assets:
 ---
 
 ## Q
-실수 $a$, $b$에 대하여 $a>0$, $b<0$일 때, 다음 보기의 설명 중 옳은 것을 모두 고른 것은?
+실수 \(a,\ b\)에 대하여 \(a>0,\ b<0\)일 때, 다음 보기의 설명 중 옳은 것을 모두 고른 것은?
 
-ㄱ. $\sqrt{(-2)^2}+\sqrt{-3}\sqrt{-4}=2+2\sqrt{3}$
+<보기>
 
-ㄴ. $\sqrt{a}\sqrt{b}=\sqrt{ab}\,i$
-
-ㄷ. $\sqrt{-a}\sqrt{-b}=-\sqrt{ab}$
-
-ㄹ. $\dfrac{\sqrt{a}}{\sqrt{b}}=-\sqrt{\dfrac{a}{b}}$
+ㄱ. \(\sqrt{(-2)^2}+\sqrt{-3}\sqrt{-4}=2+2\sqrt{3}\)
+ㄴ. \(\sqrt{a}\sqrt{b}=\sqrt{ab}i\)
+ㄷ. \(\sqrt{-a}\sqrt{-b}=-\sqrt{ab}\)
+ㄹ. \(\frac{\sqrt{a}}{\sqrt{b}}=-\sqrt{\frac{a}{b}}\)
 
 ## Choices
 ① ㄱ
@@ -104,3 +103,5 @@ $b<0$이므로 $b=-t\ (t>0)$로 두고 판단한다.
 이므로 참.
 
 따라서 옳은 것은 ㄹ만이고, 정답은 ③이다.
+
+따라서 정답은 ③이다.

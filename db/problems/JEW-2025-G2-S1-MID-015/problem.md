@@ -24,17 +24,19 @@ assets:
 - assets/original/015_2-1. 삼각함수.png
 ---
 ## Q
-$$
+\[
 \frac{\cos\theta}{1+\sin\theta}+\tan\theta=5
-$$
-일 때, $\cos\theta$의 값은?
+\]
+일 때, \(\cos\theta\)의 값은?
 
 ## Choices
-① $\dfrac{1}{5}$  
-② $\dfrac{1}{6}$  
-③ $\dfrac{1}{7}$  
-④ $\dfrac{1}{8}$  
-⑤ $\dfrac{1}{9}$
+
+
+① \(\dfrac15\)
+② \(\dfrac25\)
+③ \(\dfrac35\)
+④ \(\dfrac45\)
+⑤ \(1\)
 
 ## Answer
 ①
@@ -60,3 +62,26 @@ $$
 \cos\theta=\frac{1}{5}
 $$
 이다.
+
+따라서 정답은 ①이다.
+다음 항등식을 이용한다.
+$$
+\frac{\cos\theta}{1+\sin\theta}
+=\frac{\cos\theta(1-\sin\theta)}{1-\sin^2\theta}
+=\frac{1-\sin\theta}{\cos\theta}
+=\sec\theta-\tan\theta
+$$
+주어진 식은
+$$
+(\sec\theta-\tan\theta)+\tan\theta=5
+$$
+$$
+\sec\theta=5
+$$
+이므로
+$$
+\cos\theta=\frac{1}{5}
+$$
+이다.
+
+따라서 정답은 ①이다.

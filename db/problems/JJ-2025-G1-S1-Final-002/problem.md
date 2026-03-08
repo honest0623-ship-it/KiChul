@@ -21,13 +21,21 @@ tags:
 - 객관식
 - 출제번호-2
 assets:
+- assets/scan.png
 - assets/original/
 - assets/original/002.png
 ---
+
 ## Q
-방정식 $x^3+8=0$의 한 허근을 $\omega$라고 할 때, $\omega^4+\omega^3+4\omega^2+9=a\omega+b$이다. 이때 실수 $a,b$에 대하여 $a+b$의 값은?
+방정식 \(x^3+8=0\)의 한 허근을 \(\omega\)라 할 때,
+\[
+\omega^4+\omega^3+4\omega^2+9=a\omega+b
+\]
+이다. 이때 실수 \(a,\ b\)에 대하여 \(a+b\)의 값은?
 
 ## Choices
+
+
 ① -15
 ② -10
 ③ -5
@@ -35,19 +43,31 @@ assets:
 ⑤ 5
 
 ## Answer
-①
+1
 
 ## Solution
-허근 $\omega$는 $x^3+8=(x+2)(x^2-2x+4)$의 근이므로 $\omega^2-2\omega+4=0$에서 $\omega^2=2\omega-4$이다.
-
-또한 $\omega^3=-8$, $\omega^4=\omega\cdot\omega^3=-8\omega$이므로
-$$
+Since \(\omega\) is a non-real root of \(x^3+8=0\), we have
+\[
+x^3+8=(x+2)(x^2-2x+4),
+\]
+so
+\[
+\omega^2-2\omega+4=0
+\Rightarrow \omega^2=2\omega-4.
+\]
+Also,
+\[
+\omega^3=-8,
+\qquad
+\omega^4=\omega\cdot\omega^3=-8\omega.
+\]
+Therefore
+\[
 \omega^4+\omega^3+4\omega^2+9
-=(-8\omega)+(-8)+4(2\omega-4)+9
-=-15.
-$$
-따라서 $a=0$, $b=-15$이므로
-$$
-a+b=-15
-$$
-이다.
+=(-8\omega)+(-8)+4(2\omega-4)+9=-15.
+\]
+So \(a=0\), \(b=-15\), and
+\[
+a+b=-15.
+\]
+Thus the correct choice is 1.

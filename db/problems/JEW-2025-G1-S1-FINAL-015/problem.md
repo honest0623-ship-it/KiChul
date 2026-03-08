@@ -24,10 +24,13 @@ assets:
 - assets/original/
 - assets/original/015.png
 ---
-## Q
-다음 아래 그림과 같이 $\angle B=90^\circ$인 직각삼각형 $ABC$의 빗변의 길이는 $10$이고 내접원의 반지름의 길이는 $1$일 때, $BC$의 길이는 $p-\sqrt{q}$이다. 이때 두 자연수 $p$, $q$에 대하여 $p+q$의 값은? (단, $BC<AB$)
 
-<img src="assets/scan.png" alt="figure" style="width:39%; max-width:39%; height:auto;" />
+## Q
+다음 그림과 같이 \(\angle B=90^\circ\)인 직각삼각형 \(ABC\)의 빗변의 길이는 10이고
+내접원의 반지름의 길이는 1일 때, \(\overline{BC}\)의 길이는 \(p-\sqrt{q}\)이다.
+이때 두 자연수 \(p,\ q\)에 대하여 \(p+q\)의 값은? (단, \(\overline{BC}<\overline{AB}\))
+
+<img src="assets/scan.png" alt="문항 도형" style="width:70% !important; max-width:70% !important; height:auto;" />
 
 ## Choices
 ① 16
@@ -35,57 +38,43 @@ assets:
 ③ 18
 ④ 19
 ⑤ 20
-
 ## Answer
-⑤
+5
 
 ## Solution
-$AB=a$, $BC=b$ ($a>b$), 빗변의 길이를 $10$이라 두자.
-
-직각삼각형 내접반지름은
-$$
-r=\frac{a+b-10}{2}=1
-$$
-이므로
-$$
-a+b=12
-$$
-이다.
-
-또
-$$
-a^2+b^2=100
-$$
-이다.
-
-$(a+b)^2=a^2+b^2+2ab$에서
-$$
-144=100+2ab
-$$
-이므로
-$$
-ab=22
-$$
-이다.
-
-따라서 $a,b$는
-$$
-t^2-12t+22=0
-$$
-의 두 근이므로
-$$
-t=6\pm\sqrt{14}
-$$
-이다.
-
-$BC<AB$이므로
-$$
-BC=6-\sqrt{14}
-$$
-이다.
-
-따라서
-$$
-p=6,\quad q=14,\quad p+q=20
-$$
-이다.
+Let \(AB=x\), \(BC=y\). The hypotenuse is 10.
+For a right triangle, the inradius is
+\[
+r=\frac{x+y-10}{2}.
+\]
+Since \(r=1\),
+\[
+x+y=12.
+\]
+Also,
+\[
+x^2+y^2=100.
+\]
+So
+\[
+(x+y)^2=x^2+y^2+2xy
+\Rightarrow 144=100+2xy
+\Rightarrow xy=22.
+\]
+Thus \(x,y\) are the roots of
+\[
+t^2-12t+22=0,
+\]
+so
+\[
+t=6\pm\sqrt{14}.
+\]
+Because \(BC<AB\),
+\[
+BC=6-\sqrt{14}.
+\]
+Hence \(p=6\), \(q=14\), and
+\[
+p+q=20.
+\]
+So the correct choice is 5.

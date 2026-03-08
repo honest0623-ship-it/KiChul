@@ -48,6 +48,7 @@ class ExamLayout:
     show_source_info: bool
     show_unit_info: bool
     show_teacher_answer: bool
+    reset_question_number_by_school: bool
 
 
 PROBLEM_ID_RE = re.compile(
@@ -111,13 +112,21 @@ ANSWER_SHEET_TEMPLATE = """
       font-size: 16pt;
       margin: 0 0 8mm 0;
     }
-    ol {
+    .answer-list {
       margin: 0;
-      padding-left: 7mm;
+      padding-left: 0;
+      list-style: none;
     }
-    li {
+    .answer-row {
       margin: 0 0 1.8mm 0;
       break-inside: avoid;
+      display: flex;
+      align-items: baseline;
+      gap: 1.8mm;
+    }
+    .num {
+      min-width: 14mm;
+      font-weight: 700;
     }
     .meta {
       color: #666;
@@ -130,11 +139,15 @@ ANSWER_SHEET_TEMPLATE = """
 </head>
 <body>
   <h1>Answer Sheet</h1>
-  <ol>
+  <div class="answer-list">
     {% for row in rows %}
-      <li>{{ row.answer_text }} <span class="meta">({{ row.problem_id }})</span></li>
+      <div class="answer-row">
+        <span class="num">{{ row.number }}번</span>
+        <span>{{ row.answer_text }}</span>
+        <span class="meta">({{ row.problem_id }})</span>
+      </div>
     {% endfor %}
-  </ol>
+  </div>
 </body>
 </html>
 """
@@ -149,25 +162,25 @@ SOLUTION_SHEET_TEMPLATE = """
     @page { size: A4; margin: 10mm 9mm 10mm 9mm; }
     body {
       font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-      font-size: 10.2pt;
-      line-height: 1.3;
+      font-size: 9pt;
+      line-height: 1.22;
       color: #111;
       margin: 0;
     }
     h1 {
-      font-size: 15pt;
-      margin: 0 0 3mm 0;
+      font-size: 13.5pt;
+      margin: 0 0 2.2mm 0;
     }
     .sheet {
       column-count: 2;
-      column-gap: 4mm;
+      column-gap: 3.2mm;
       column-fill: auto;
     }
     .item {
       border: 0.8pt solid #cfd6dd;
       border-radius: 4px;
-      padding: 1.4mm 1.8mm;
-      margin: 0 0 1.6mm 0;
+      padding: 1mm 1.2mm;
+      margin: 0 0 1mm 0;
       break-inside: avoid;
       page-break-inside: avoid;
       -webkit-column-break-inside: avoid;
@@ -176,45 +189,45 @@ SOLUTION_SHEET_TEMPLATE = """
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      margin: 0 0 0.9mm 0;
+      margin: 0 0 0.55mm 0;
       border-bottom: 0.5pt solid #e5e7eb;
-      padding-bottom: 0.7mm;
+      padding-bottom: 0.45mm;
     }
     .num {
       font-weight: 700;
-      font-size: 10.4pt;
+      font-size: 9.3pt;
     }
     .pid {
       color: #667085;
-      font-size: 8.2pt;
+      font-size: 7.4pt;
     }
     .label {
-      font-size: 8.8pt;
+      font-size: 7.9pt;
       color: #475467;
-      margin: 0 0 0.4mm 0;
+      margin: 0 0 0.2mm 0;
       font-weight: 700;
     }
     .answer,
     .solution {
-      margin-bottom: 0.7mm;
+      margin-bottom: 0.4mm;
       overflow-wrap: anywhere;
       word-break: break-word;
     }
     .answer p,
     .solution p {
       margin: 0;
-      line-height: 1.26;
+      line-height: 1.18;
     }
     .answer p + p,
     .solution p + p {
-      margin-top: 0.25mm;
+      margin-top: 0.12mm;
     }
     .answer .MathJax_Display,
     .solution .MathJax_Display,
     .answer mjx-container[display="true"],
     .solution mjx-container[display="true"] {
-      margin-top: 0.35mm !important;
-      margin-bottom: 0.35mm !important;
+      margin-top: 0.15mm !important;
+      margin-bottom: 0.15mm !important;
       max-width: 100%;
       overflow: hidden;
     }
@@ -225,10 +238,10 @@ SOLUTION_SHEET_TEMPLATE = """
     }
     .answer img,
     .solution img {
-      max-width: 78%;
+      max-width: 72%;
       height: auto;
       display: block;
-      margin: 0.5mm auto;
+      margin: 0.35mm auto;
     }
   </style>
   {{ mathjax_bootstrap | safe }}
@@ -509,6 +522,36 @@ def _build_exam_summary(problems: Sequence[ParsedProblem]) -> Dict[str, str]:
     }
 
 
+def _extract_problem_school(problem: ParsedProblem) -> str:
+    school = str(problem.front_matter.get("school", "")).strip().upper()
+    if school:
+        return school
+    matched = PROBLEM_ID_RE.match(problem.display_id)
+    if not matched:
+        return ""
+    return str(matched.group("school") or "").strip().upper()
+
+
+def _build_display_numbers(
+    problems: Sequence[ParsedProblem], *, reset_question_number_by_school: bool
+) -> List[int]:
+    if not reset_question_number_by_school:
+        return list(range(1, len(problems) + 1))
+
+    numbers: List[int] = []
+    prev_school: str | None = None
+    current = 0
+    for problem in problems:
+        school = _extract_problem_school(problem)
+        if prev_school is None or school != prev_school:
+            current = 1
+            prev_school = school
+        else:
+            current += 1
+        numbers.append(current)
+    return numbers
+
+
 def _problem_to_template_context(
     problem: ParsedProblem, number: int, warnings: List[str], show_teacher_answer: bool
 ) -> Dict[str, object]:
@@ -534,6 +577,7 @@ def _problem_to_template_context(
     return {
         "number": number,
         "problem_id": problem.display_id,
+        "school": _extract_problem_school(problem),
         "source_info": _build_source_info(problem),
         "source_exam_info": header_meta["source_exam_info"],
         "source_unit_info": header_meta["source_unit_info"],
@@ -619,14 +663,18 @@ def render_exam_pdf(
     )
     template = env.get_template(template_path.name)
 
+    display_numbers = _build_display_numbers(
+        problems,
+        reset_question_number_by_school=layout.reset_question_number_by_school,
+    )
     items = [
         _problem_to_template_context(
             problem,
-            idx,
+            display_numbers[idx],
             warnings,
             show_teacher_answer=layout.show_teacher_answer,
         )
-        for idx, problem in enumerate(problems, start=1)
+        for idx, problem in enumerate(problems)
     ]
     exam_summary = _build_exam_summary(problems)
 
@@ -639,6 +687,7 @@ def render_exam_pdf(
         show_source_info=layout.show_source_info,
         show_unit_info=layout.show_unit_info,
         show_teacher_answer=layout.show_teacher_answer,
+        reset_question_number_by_school=layout.reset_question_number_by_school,
         paper=layout.paper,
         page_width_mm=layout.page_width_mm,
         page_height_mm=layout.page_height_mm,
@@ -660,6 +709,7 @@ def render_answer_sheet_pdf(
     out_pdf: Path,
     mathjax_bundle: Path,
     warnings: List[str],
+    reset_question_number_by_school: bool = False,
 ) -> None:
     if not mathjax_bundle.exists():
         raise FileNotFoundError(f"MathJax bundle not found: {mathjax_bundle}")
@@ -667,8 +717,12 @@ def render_answer_sheet_pdf(
     env = Environment(autoescape=select_autoescape(["html"]))
     template = env.from_string(ANSWER_SHEET_TEMPLATE)
 
+    display_numbers = _build_display_numbers(
+        problems,
+        reset_question_number_by_school=reset_question_number_by_school,
+    )
     rows = []
-    for idx, problem in enumerate(problems, start=1):
+    for idx, problem in enumerate(problems):
         answer_text = (problem.answer or "").strip()
         if not answer_text:
             answer_text = "(Answer missing)"
@@ -676,7 +730,7 @@ def render_answer_sheet_pdf(
 
         rows.append(
             {
-                "number": idx,
+                "number": display_numbers[idx],
                 "problem_id": problem.display_id,
                 "answer_text": answer_text,
             }
@@ -695,6 +749,7 @@ def render_solution_sheet_pdf(
     out_pdf: Path,
     mathjax_bundle: Path,
     warnings: List[str],
+    reset_question_number_by_school: bool = False,
 ) -> None:
     if not mathjax_bundle.exists():
         raise FileNotFoundError(f"MathJax bundle not found: {mathjax_bundle}")
@@ -702,8 +757,12 @@ def render_solution_sheet_pdf(
     env = Environment(autoescape=select_autoescape(["html"]))
     template = env.from_string(SOLUTION_SHEET_TEMPLATE)
 
+    display_numbers = _build_display_numbers(
+        problems,
+        reset_question_number_by_school=reset_question_number_by_school,
+    )
     rows = []
-    for idx, problem in enumerate(problems, start=1):
+    for idx, problem in enumerate(problems):
         base_dir = problem.source_path.parent
 
         answer_md = (problem.answer or "").strip()
@@ -725,7 +784,7 @@ def render_solution_sheet_pdf(
 
         rows.append(
             {
-                "number": idx,
+                "number": display_numbers[idx],
                 "problem_id": problem.display_id,
                 "answer_html": Markup(answer_html),
                 "solution_html": Markup(solution_html),

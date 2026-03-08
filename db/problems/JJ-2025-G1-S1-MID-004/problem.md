@@ -26,7 +26,6 @@ assets:
 - assets/original/
 - assets/original/JJ.2025.G1.S1.MID.COM1.pdf
 ---
-
 ## Q
 $x^3+(1-a)x^2-(a+2)x+2a$가 서로 다른 세 일차식의 곱으로 인수분해 될 때, 다음 중 상수 $a$의 값이 될 수 없는 것은?
 

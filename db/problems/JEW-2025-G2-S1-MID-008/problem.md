@@ -24,18 +24,20 @@ assets:
 - assets/original/008_2-1. 삼각함수.png
 ---
 ## Q
-$x$에 대한 이차방정식
-$$
+\(x\)에 대한 이차방정식
+\[
 x^2-2ax-a^2=0
-$$
-의 두 근이 각각 $\sin\theta$, $\cos\theta$일 때, 양수 $a$의 값은?
+\]
+의 두 근이 \(\sin\theta,\ \cos\theta\)일 때, 양수 \(a\)의 값은?
 
 ## Choices
-① $\dfrac{1}{2}$  
-② $\dfrac{\sqrt{5}}{5}$  
-③ $\dfrac{\sqrt{6}}{6}$  
-④ $\dfrac{\sqrt{7}}{7}$  
-⑤ $\dfrac{\sqrt{8}}{8}$
+
+
+① \(\dfrac{\sqrt5}{5}\)
+② \(\dfrac{1}{\sqrt5}\)
+③ \(\dfrac{\sqrt6}{6}\)
+④ \(\dfrac{\sqrt7}{7}\)
+⑤ \(\dfrac{\sqrt8}{8}\)
 
 ## Answer
 ③
@@ -69,3 +71,34 @@ $$
 a=\frac{1}{\sqrt{6}}=\frac{\sqrt{6}}{6}
 $$
 이다.
+
+따라서 정답은 ③이다.
+두 근을 $\sin\theta$, $\cos\theta$라 하면 근과 계수의 관계에서
+$$
+\sin\theta+\cos\theta=2a,\qquad
+\sin\theta\cos\theta=-a^2
+$$
+를 얻는다.
+또
+$$
+\sin^2\theta+\cos^2\theta=1
+$$
+이고,
+$$
+\sin^2\theta+\cos^2\theta
+=(\sin\theta+\cos\theta)^2-2\sin\theta\cos\theta
+$$
+이므로
+$$
+1=(2a)^2-2(-a^2)=4a^2+2a^2=6a^2
+$$
+$$
+a^2=\frac{1}{6}
+$$
+양수 조건에서
+$$
+a=\frac{1}{\sqrt{6}}=\frac{\sqrt{6}}{6}
+$$
+이다.
+
+따라서 정답은 ③이다.

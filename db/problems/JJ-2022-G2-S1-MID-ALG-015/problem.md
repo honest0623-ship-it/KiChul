@@ -12,10 +12,10 @@ source_question_kind: objective
 source_question_label: '15'
 difficulty: 4
 level: 4
-unit: 대수(2022개정)>2. 삼각함수>2-2. 삼각함수의 그래프
+unit: 대수(2022개정)>2. 삼각함수>2-3. 삼각함수의 활용
 unit_l1: 대수(2022개정)
 unit_l2: 2. 삼각함수
-unit_l3: 2-2. 삼각함수의 그래프
+unit_l3: 2-3. 삼각함수의 활용
 source: user_upload_2026-03-06
 tags:
 - 수동생성

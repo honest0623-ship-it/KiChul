@@ -33,7 +33,7 @@ assets:
 ## Q
 다음 그림과 같이 두 점 $(3,a)$, $(5,b)$는 함수 $y=\log_3 x$의 그래프 위의 점이다. 함수 $y=\log_3 x$의 그래프가 점 $\left(k,\dfrac{a+b}{2}\right)$를 지날 때, $k$의 값을 구하면?
 
-<img src="assets/scan.png" alt="JJ-2022-G2-S1-MID-ALG-007 graph" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="JJ-2022-G2-S1-MID-ALG-007 graph" style="width:80% !important; max-width:80% !important; height:auto;" />
 
 ## Choices
 ① $\sqrt{14}$

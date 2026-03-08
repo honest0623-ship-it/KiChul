@@ -27,12 +27,14 @@ assets:
   # Raw source image archive.
   - assets/original/
   - assets/original/서답5번_2-2. 이차방정식과 이차함수.png
+  - assets/original/서답5번_2-2. 이차방정식과 이차함수_scan.png
 ---
 
 ## Q
-오른쪽 그림과 같은 이차함수 $y=9-x^2$의 그래프와 $x$축으로 둘러싸인 부분에 직사각형을 내접시킬 때, 이 직사각형의 둘레의 길이의 최댓값을 구하는 과정과 답을 쓰시오.
+오른쪽 그림과 같이 두 꼭짓점이 \(x\)축 위에 있고, 나머지 두 꼭짓점이 이차함수 \(y=9-x^2\)의 그래프 위에 있는 직사각형이 있다.
+이 직사각형의 둘레의 길이의 최댓값을 구하시오.
 
-<img src="assets/scan.png" style="width: 100%; max-width: 100%;">
+<img src="assets/scan.png" alt="문항 도형" style="width:60% !important; max-width:60% !important; height:auto;" />
 
 ## Choices
 
@@ -66,3 +68,5 @@ L=-2(a-1)^2+20
 20
 \]
 이다.
+
+따라서 답은 최댓값은 $20$이다.이다.

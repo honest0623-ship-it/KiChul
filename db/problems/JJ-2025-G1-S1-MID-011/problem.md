@@ -26,7 +26,6 @@ assets:
 - assets/original/
 - assets/original/JJ.2025.G1.S1.MID.COM1.pdf
 ---
-
 ## Q
 이차방정식 $x^2+2x-3=0$의 두 근을 $\alpha,\beta$라고 할 때, 두 수 $\dfrac{\alpha}{1+\alpha}$, $\dfrac{\beta}{1+\beta}$를 두 근으로 하고 $x^2$의 계수가 4인 이차방정식을 구하면?
 

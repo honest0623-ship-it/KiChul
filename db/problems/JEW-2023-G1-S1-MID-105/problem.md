@@ -34,7 +34,7 @@ assets:
 수면의 높이 \(h\)를 구하는 풀이 과정을 쓰고 답을 구하시오.
 (단, 막대의 길이는 \(x+4\)보다 길다.)
 
-<img src="assets/scan.png" alt="problem-105-figure" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="문항 도형" style="width:60% !important; max-width:60% !important; height:auto;" />
 
 (1) [그림 1]과 같이 물이 가득 담긴 직육면체 모양의 그릇의 물의 부피를 구하시오.
 
@@ -77,3 +77,7 @@ assets:
 \[
 \text{(3) }h=x+4.
 \]
+
+따라서 답은 다음과 같다.
+
+(1) \((x+2)^2(x+4)\), (2) \((x+1)(x+3)(x+4)\), (3) \(h=x+4\)
