@@ -209,8 +209,12 @@
       padding: 10px;
       margin-top: 8px;
       grid-column: 1 / -1;
-      --manual-order-list-height: 1050px;
-      --manual-preview-height: var(--manual-order-list-height);
+      --manual-workbench-height: 1200px;
+      --manual-grid-gap: 8px;
+      --manual-top-row-height: 700px;
+      --manual-editor-row-height: calc(
+        var(--manual-workbench-height) - var(--manual-grid-gap) - var(--manual-top-row-height)
+      );
     }
     .manual-order-list {
       list-style: none;
@@ -218,10 +222,11 @@
       padding: 0;
       display: grid;
       gap: 6px;
-      min-height: var(--manual-order-list-height);
-      max-height: var(--manual-order-list-height);
+      min-height: var(--manual-workbench-height);
+      max-height: var(--manual-workbench-height);
       overflow-y: auto;
       overflow-x: hidden;
+      grid-area: list;
     }
     .manual-order-item {
       border: 1px solid #cbd5e1;
@@ -343,19 +348,27 @@
       margin-top: 8px;
       display: grid;
       grid-template-columns: minmax(0, 3fr) minmax(440px, 2fr);
-      gap: 8px;
+      grid-template-rows: var(--manual-top-row-height) var(--manual-editor-row-height);
+      grid-template-areas:
+        "list preview"
+        "list editor";
+      gap: var(--manual-grid-gap);
       align-items: stretch;
+      min-height: var(--manual-workbench-height);
     }
     .manual-preview-panel {
       border: 1px solid #cbd5e1;
       border-radius: 8px;
       background: #fff;
       padding: 10px 12px;
-      min-height: var(--manual-preview-height);
-      height: var(--manual-preview-height);
-      max-height: var(--manual-preview-height);
+      min-height: 0;
+      height: 100%;
+      max-height: 100%;
       display: flex;
       flex-direction: column;
+    }
+    .manual-preview-panel-saved {
+      grid-area: preview;
     }
     .manual-preview-title {
       font-size: 13px;
@@ -405,14 +418,106 @@
       color: #6b7280;
       font-size: 12px;
     }
+    .manual-editor-panel {
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px 12px;
+      min-height: 0;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      grid-area: editor;
+    }
+    .manual-editor-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .manual-editor-subtitle {
+      margin-top: 2px;
+      color: #64748b;
+      font-size: 12px;
+      word-break: break-all;
+    }
+    .manual-editor-actions {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .manual-editor-actions .btn {
+      padding: 5px 8px;
+      font-size: 11px;
+    }
+    .manual-editor-status {
+      margin-top: 6px;
+      color: #475569;
+      font-size: 12px;
+      min-height: 18px;
+    }
+    .manual-editor-fields {
+      margin-top: 6px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      min-height: 0;
+      overflow: auto;
+      padding-right: 2px;
+    }
+    .manual-editor-field {
+      display: grid;
+      gap: 4px;
+    }
+    .manual-editor-field > label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #334155;
+    }
+    .manual-editor-field > textarea {
+      width: 100%;
+      min-height: 72px;
+      max-height: 220px;
+      resize: vertical;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 6px 7px;
+      font-size: 12px;
+      line-height: 1.45;
+      font-family: Consolas, "Courier New", monospace;
+      color: #0f172a;
+      background: #f8fafc;
+      box-sizing: border-box;
+    }
+    .manual-editor-field > textarea:focus {
+      outline: 2px solid rgba(37, 99, 235, 0.25);
+      border-color: #3b82f6;
+      background: #fff;
+    }
     @media (max-width: 1050px) {
       .meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .form-grid { grid-template-columns: 1fr; }
-      .manual-order-main { grid-template-columns: 1fr; }
+      .manual-order-main {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+        grid-template-areas:
+          "list"
+          "preview"
+          "editor";
+        min-height: auto;
+      }
+      .manual-order-list {
+        min-height: 260px;
+        max-height: 260px;
+      }
       .manual-preview-panel {
         min-height: 220px;
         height: auto;
         max-height: none;
+      }
+      .manual-editor-panel {
+        min-height: 300px;
+        height: auto;
       }
       .meta-editor-grid {
         grid-template-columns: 1fr;
@@ -709,13 +814,42 @@
             </div>
             <div class="manual-order-main">
               <ul id="manual-order-list" class="manual-order-list"></ul>
-              <aside class="manual-preview-panel">
-                <div class="manual-preview-title" id="manual-preview-title">문항 미리보기</div>
-                <div class="manual-preview-subtitle" id="manual-preview-subtitle">문항을 선택하면 미리보기가 표시됩니다.</div>
+              <aside class="manual-preview-panel manual-preview-panel-saved">
+                <div class="manual-preview-title" id="manual-preview-title">미리보기</div>
+                <div class="manual-preview-subtitle" id="manual-preview-subtitle">문항을 선택하면 저장된 problem.md 미리보기가 표시됩니다.</div>
                 <div class="manual-preview-content" id="manual-preview-content">
                   <p class="manual-preview-empty">문항을 마우스로 클릭하거나, 선택된 문항에서 방향키로 이동하면 미리보기가 갱신됩니다.</p>
                 </div>
               </aside>
+              <section class="manual-editor-panel">
+                <div class="manual-editor-title">문항 편집기</div>
+                <div class="manual-editor-subtitle" id="manual-editor-subtitle">문항을 선택하면 problem.md 본문을 불러옵니다.</div>
+                <div class="manual-editor-actions">
+                  <button class="btn secondary" id="manual-editor-reload" type="button">원본 다시불러오기</button>
+                  <button class="btn secondary" id="manual-editor-open-folder" type="button">문항 폴더 열기</button>
+                  <button class="btn secondary" id="manual-editor-preview" type="button">편집 미리보기</button>
+                  <button class="btn" id="manual-editor-save" type="button">problem.md 저장</button>
+                </div>
+                <div class="manual-editor-status" id="manual-editor-status"></div>
+                <div class="manual-editor-fields">
+                  <div class="manual-editor-field">
+                    <label for="manual-editor-q">Q</label>
+                    <textarea id="manual-editor-q" spellcheck="false"></textarea>
+                  </div>
+                  <div class="manual-editor-field">
+                    <label for="manual-editor-choices">Choices</label>
+                    <textarea id="manual-editor-choices" spellcheck="false"></textarea>
+                  </div>
+                  <div class="manual-editor-field">
+                    <label for="manual-editor-answer">Answer</label>
+                    <textarea id="manual-editor-answer" spellcheck="false"></textarea>
+                  </div>
+                  <div class="manual-editor-field">
+                    <label for="manual-editor-solution">Solution</label>
+                    <textarea id="manual-editor-solution" spellcheck="false"></textarea>
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
         </div>
@@ -730,6 +864,7 @@
           <label><input type="checkbox" name="solution_sheet" checked /> 해설지 PDF 생성(정답+해설)</label>
           <label><input type="checkbox" name="answer_sheet" /> 답안지 PDF 생성</label>
           <label><input type="checkbox" name="teacher_view" {% if pdf_selected.teacher_view %}checked{% endif %} /> 교사용 출력(문항 아래 정답 표시)</label>
+          <label><input type="checkbox" name="reset_question_number_by_school" {% if pdf_selected.reset_question_number_by_school %}checked{% endif %} /> 학교별문항번호리셋(학교 변경 시 1번부터)</label>
         </div>
 
         <div class="inline">
@@ -929,6 +1064,16 @@
       const manualPreviewTitle = document.getElementById("manual-preview-title");
       const manualPreviewSubtitle = document.getElementById("manual-preview-subtitle");
       const manualPreviewContent = document.getElementById("manual-preview-content");
+      const manualEditorSubtitle = document.getElementById("manual-editor-subtitle");
+      const manualEditorStatus = document.getElementById("manual-editor-status");
+      const manualEditorReloadBtn = document.getElementById("manual-editor-reload");
+      const manualEditorOpenFolderBtn = document.getElementById("manual-editor-open-folder");
+      const manualEditorPreviewBtn = document.getElementById("manual-editor-preview");
+      const manualEditorSaveBtn = document.getElementById("manual-editor-save");
+      const manualEditorQInput = document.getElementById("manual-editor-q");
+      const manualEditorChoicesInput = document.getElementById("manual-editor-choices");
+      const manualEditorAnswerInput = document.getElementById("manual-editor-answer");
+      const manualEditorSolutionInput = document.getElementById("manual-editor-solution");
       const sortFieldInput1 = document.getElementById("sort_field_1");
       const sortFieldInput2 = document.getElementById("sort_field_2");
       const sortFieldInput3 = document.getElementById("sort_field_3");
@@ -964,7 +1109,11 @@
       let selectedManualOrderId = "";
       let editingProblemId = "";
       let previewAbortController = null;
+      let contentAbortController = null;
       const previewCache = new Map();
+      const contentCache = new Map();
+      let editorProblemId = "";
+      let editorDirty = false;
 
       const parseIds = (raw) => {
         const token = (raw || "").trim();
@@ -1337,11 +1486,18 @@
           .join(">");
       };
 
-      const setPreviewEmpty = (message, subtitle = "문항을 선택하면 미리보기가 표시됩니다.") => {
-        if (manualPreviewTitle) manualPreviewTitle.textContent = "문항 미리보기";
-        if (manualPreviewSubtitle) manualPreviewSubtitle.textContent = subtitle;
-        if (manualPreviewContent) {
-          manualPreviewContent.innerHTML = `<p class="manual-preview-empty">${escapeHtml(message)}</p>`;
+      const setPreviewAreaEmpty = (
+        titleEl,
+        subtitleEl,
+        contentEl,
+        titleText,
+        message,
+        subtitle = "문항을 선택하면 미리보기가 표시됩니다."
+      ) => {
+        if (titleEl) titleEl.textContent = titleText;
+        if (subtitleEl) subtitleEl.textContent = subtitle;
+        if (contentEl) {
+          contentEl.innerHTML = `<p class="manual-preview-empty">${escapeHtml(message)}</p>`;
         }
       };
 
@@ -1360,16 +1516,12 @@
         return pieces.join(" | ");
       };
 
-      const renderPreviewPayload = (problemId, payload) => {
-        if (manualPreviewTitle) manualPreviewTitle.textContent = "문항 미리보기";
-        if (manualPreviewSubtitle) manualPreviewSubtitle.textContent = buildPreviewSubtitle(problemId);
-        if (!manualPreviewContent) return;
-
+      const buildPreviewBlocks = (payload) => {
         const questionHtml = String((payload && payload.question_html) || "").trim();
         const choicesHtml = String((payload && payload.choices_html) || "").trim();
         const answerHtml = String((payload && payload.answer_html) || "").trim();
         const solutionHtml = String((payload && payload.solution_html) || "").trim();
-        const blocks = [
+        const rows = [
           `
             <section class="manual-preview-block">
               <div class="manual-preview-label">문항</div>
@@ -1378,7 +1530,7 @@
           `,
         ];
         if (choicesHtml) {
-          blocks.push(`
+          rows.push(`
             <section class="manual-preview-block">
               <div class="manual-preview-label">선택지</div>
               ${choicesHtml}
@@ -1386,24 +1538,89 @@
           `);
         }
         if (answerHtml) {
-          blocks.push(`
+          rows.push(`
             <section class="manual-preview-block">
               <div class="manual-preview-label">정답</div>
               ${answerHtml}
             </section>
           `);
         }
-        blocks.push(`
+        rows.push(`
           <section class="manual-preview-block">
             <div class="manual-preview-label">해설</div>
             ${solutionHtml || '<p class="manual-preview-empty">해설 본문이 비어 있습니다.</p>'}
           </section>
         `);
+        return rows.join("");
+      };
 
-        manualPreviewContent.innerHTML = blocks.join("");
+      const renderPreviewInto = (problemId, payload, titleEl, subtitleEl, contentEl, titleText) => {
+        if (titleEl) titleEl.textContent = titleText;
+        if (subtitleEl) subtitleEl.textContent = buildPreviewSubtitle(problemId);
+        if (!contentEl) return;
+        contentEl.innerHTML = buildPreviewBlocks(payload);
         if (window.MathJax && typeof window.MathJax.typesetPromise === "function") {
-          window.MathJax.typesetPromise([manualPreviewContent]).catch(() => {});
+          window.MathJax.typesetPromise([contentEl]).catch(() => {});
         }
+      };
+
+      const setPreviewEmpty = (message, subtitle = "문항을 선택하면 미리보기가 표시됩니다.") => {
+        setPreviewAreaEmpty(
+          manualPreviewTitle,
+          manualPreviewSubtitle,
+          manualPreviewContent,
+          "미리보기",
+          message,
+          subtitle
+        );
+      };
+
+      const renderSavedPreviewPayload = (problemId, payload) => {
+        renderPreviewInto(
+          problemId,
+          payload,
+          manualPreviewTitle,
+          manualPreviewSubtitle,
+          manualPreviewContent,
+          "미리보기"
+        );
+      };
+
+      const setEditorStatus = (message, isError = false) => {
+        if (!manualEditorStatus) return;
+        manualEditorStatus.textContent = String(message || "");
+        manualEditorStatus.style.color = isError ? "#b91c1c" : "#475569";
+      };
+
+      const setEditorFields = (sections) => {
+        if (manualEditorQInput) manualEditorQInput.value = String((sections && sections.q) || "");
+        if (manualEditorChoicesInput) manualEditorChoicesInput.value = String((sections && sections.choices) || "");
+        if (manualEditorAnswerInput) manualEditorAnswerInput.value = String((sections && sections.answer) || "");
+        if (manualEditorSolutionInput) manualEditorSolutionInput.value = String((sections && sections.solution) || "");
+      };
+
+      const getEditorSections = () => ({
+        q: manualEditorQInput ? manualEditorQInput.value : "",
+        choices: manualEditorChoicesInput ? manualEditorChoicesInput.value : "",
+        answer: manualEditorAnswerInput ? manualEditorAnswerInput.value : "",
+        solution: manualEditorSolutionInput ? manualEditorSolutionInput.value : "",
+      });
+
+      const setEditorDirty = (dirty) => {
+        editorDirty = !!dirty;
+        if (!manualEditorSubtitle) return;
+        if (!editorProblemId) {
+          manualEditorSubtitle.textContent = "문항을 선택하면 problem.md 본문을 불러옵니다.";
+          return;
+        }
+        manualEditorSubtitle.textContent = `${editorProblemId}${editorDirty ? " | 미저장 변경 있음" : " | 저장됨"}`;
+      };
+
+      const clearEditorPane = () => {
+        editorProblemId = "";
+        setEditorFields({ q: "", choices: "", answer: "", solution: "" });
+        setEditorDirty(false);
+        setEditorStatus("문항을 선택하면 편집할 수 있습니다.");
       };
 
       const loadProblemPreview = async (problemId) => {
@@ -1413,7 +1630,8 @@
         }
 
         if (previewCache.has(problemId)) {
-          renderPreviewPayload(problemId, previewCache.get(problemId));
+          const cached = previewCache.get(problemId);
+          renderSavedPreviewPayload(problemId, cached);
           return;
         }
 
@@ -1422,7 +1640,7 @@
         }
         previewAbortController = new AbortController();
 
-        if (manualPreviewTitle) manualPreviewTitle.textContent = "문항 미리보기";
+        if (manualPreviewTitle) manualPreviewTitle.textContent = "미리보기";
         if (manualPreviewSubtitle) manualPreviewSubtitle.textContent = buildPreviewSubtitle(problemId);
         if (manualPreviewContent) {
           manualPreviewContent.innerHTML = '<p class="manual-preview-empty">미리보기를 불러오는 중입니다...</p>';
@@ -1438,12 +1656,160 @@
           const payload = await response.json();
           previewCache.set(problemId, payload);
           if (selectedManualOrderId !== problemId) return;
-          renderPreviewPayload(problemId, payload);
+          renderSavedPreviewPayload(problemId, payload);
         } catch (error) {
           if (error && error.name === "AbortError") return;
           if (selectedManualOrderId !== problemId) return;
           const message = error && error.message ? error.message : "알 수 없는 오류";
           setPreviewEmpty(`미리보기를 불러오지 못했습니다. (${message})`, buildPreviewSubtitle(problemId));
+        }
+      };
+
+      const loadProblemContent = async (problemId, force = false) => {
+        if (!problemId) {
+          clearEditorPane();
+          return;
+        }
+        if (!force && contentCache.has(problemId)) {
+          const cached = contentCache.get(problemId);
+          setEditorFields(cached);
+          editorProblemId = problemId;
+          setEditorDirty(false);
+          setEditorStatus("본문 로드 완료");
+          if (previewCache.has(problemId)) {
+            renderSavedPreviewPayload(problemId, previewCache.get(problemId));
+          }
+          return;
+        }
+
+        if (contentAbortController) {
+          contentAbortController.abort();
+        }
+        contentAbortController = new AbortController();
+        setEditorStatus("본문을 불러오는 중입니다...");
+        editorProblemId = problemId;
+        setEditorDirty(false);
+
+        try {
+          const response = await fetch(`/api/problem-content?id=${encodeURIComponent(problemId)}`, {
+            signal: contentAbortController.signal,
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const payload = await response.json();
+          if (selectedManualOrderId !== problemId) return;
+          const sections = {
+            q: String((payload && payload.q) || ""),
+            choices: String((payload && payload.choices) || ""),
+            answer: String((payload && payload.answer) || ""),
+            solution: String((payload && payload.solution) || ""),
+          };
+          contentCache.set(problemId, sections);
+          setEditorFields(sections);
+          editorProblemId = problemId;
+          setEditorDirty(false);
+          setEditorStatus("본문 로드 완료");
+          if (previewCache.has(problemId)) {
+            renderSavedPreviewPayload(problemId, previewCache.get(problemId));
+          }
+        } catch (error) {
+          if (error && error.name === "AbortError") return;
+          const message = error && error.message ? error.message : "알 수 없는 오류";
+          setEditorStatus(`본문 로드 실패: ${message}`, true);
+        }
+      };
+
+      const renderDraftPreviewFromEditor = async () => {
+        if (!editorProblemId) {
+          setPreviewEmpty("문항을 먼저 선택하세요.");
+          return;
+        }
+        const sections = getEditorSections();
+        setEditorStatus("편집 미리보기를 렌더링하는 중입니다...");
+        if (manualPreviewTitle) manualPreviewTitle.textContent = "미리보기";
+        if (manualPreviewSubtitle) manualPreviewSubtitle.textContent = buildPreviewSubtitle(editorProblemId);
+        if (manualPreviewContent) {
+          manualPreviewContent.innerHTML = '<p class="manual-preview-empty">편집 미리보기를 불러오는 중입니다...</p>';
+        }
+
+        try {
+          const response = await fetch("/api/problem-preview-render", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              id: editorProblemId,
+              q: sections.q,
+              choices: sections.choices,
+              answer: sections.answer,
+              solution: sections.solution,
+            }),
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const payload = await response.json();
+          renderSavedPreviewPayload(editorProblemId, payload);
+          setEditorStatus("편집 미리보기 갱신 완료");
+        } catch (error) {
+          const message = error && error.message ? error.message : "알 수 없는 오류";
+          setEditorStatus(`편집 미리보기 실패: ${message}`, true);
+          setPreviewEmpty(`편집 미리보기를 불러오지 못했습니다. (${message})`, buildPreviewSubtitle(editorProblemId));
+        }
+      };
+
+      const saveProblemContent = async () => {
+        if (!editorProblemId) {
+          setEditorStatus("문항을 먼저 선택하세요.", true);
+          return;
+        }
+        const sections = getEditorSections();
+        if (manualEditorSaveBtn) manualEditorSaveBtn.disabled = true;
+        if (manualEditorReloadBtn) manualEditorReloadBtn.disabled = true;
+        if (manualEditorOpenFolderBtn) manualEditorOpenFolderBtn.disabled = true;
+        if (manualEditorPreviewBtn) manualEditorPreviewBtn.disabled = true;
+        setEditorStatus("problem.md 저장 중입니다...");
+
+        try {
+          const response = await fetch("/api/problem-content", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              id: editorProblemId,
+              q: sections.q,
+              choices: sections.choices,
+              answer: sections.answer,
+              solution: sections.solution,
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const detail = payload && payload.detail ? payload.detail : `HTTP ${response.status}`;
+            throw new Error(detail);
+          }
+
+          contentCache.set(editorProblemId, sections);
+          if (payload && payload.preview) {
+            previewCache.set(editorProblemId, payload.preview);
+            renderSavedPreviewPayload(editorProblemId, payload.preview);
+          } else {
+            previewCache.delete(editorProblemId);
+            await loadProblemPreview(editorProblemId);
+          }
+          setEditorDirty(false);
+          setEditorStatus("저장 완료");
+        } catch (error) {
+          const message = error && error.message ? error.message : "알 수 없는 오류";
+          setEditorStatus(`저장 실패: ${message}`, true);
+        } finally {
+          if (manualEditorSaveBtn) manualEditorSaveBtn.disabled = false;
+          if (manualEditorReloadBtn) manualEditorReloadBtn.disabled = false;
+          if (manualEditorOpenFolderBtn) manualEditorOpenFolderBtn.disabled = false;
+          if (manualEditorPreviewBtn) manualEditorPreviewBtn.disabled = false;
         }
       };
 
@@ -1458,12 +1824,20 @@
       };
 
       const selectManualOrderItem = (problemId) => {
-        selectedManualOrderId = problemId || "";
+        const nextId = problemId || "";
+        if (editorDirty && editorProblemId && nextId && editorProblemId !== nextId) {
+          const proceed = window.confirm("저장되지 않은 변경사항이 있습니다. 저장하지 않고 다른 문항으로 이동할까요?");
+          if (!proceed) return;
+        }
+
+        selectedManualOrderId = nextId;
         applyManualSelectionState();
         if (!selectedManualOrderId) {
           setPreviewEmpty(defaultPreviewMessage);
+          clearEditorPane();
           return;
         }
+        loadProblemContent(selectedManualOrderId);
         loadProblemPreview(selectedManualOrderId);
       };
 
@@ -1490,6 +1864,7 @@
           syncManualInput([]);
           syncManualSelectedInput([]);
           setPreviewEmpty(defaultPreviewMessage);
+          clearEditorPane();
           return;
         }
 
@@ -1817,6 +2192,11 @@
 
             removeProblemMetaRow(targetId);
             previewCache.delete(targetId);
+            contentCache.delete(targetId);
+            if (editorProblemId === targetId) {
+              clearEditorPane();
+              setPreviewEmpty("삭제된 문항입니다.");
+            }
 
             const orderIds = getManualListIds().filter((id) => id !== targetId);
             const checkedIds = getManualCheckedIds().filter((id) => id !== targetId);
@@ -1895,7 +2275,74 @@
         });
       }
 
+      [manualEditorQInput, manualEditorChoicesInput, manualEditorAnswerInput, manualEditorSolutionInput]
+        .filter(Boolean)
+        .forEach((inputEl) => {
+          inputEl.addEventListener("input", () => {
+            if (!editorProblemId) return;
+            setEditorDirty(true);
+            setEditorStatus("미저장 변경이 있습니다.");
+          });
+        });
+
+      if (manualEditorReloadBtn) {
+        manualEditorReloadBtn.addEventListener("click", async () => {
+          if (!editorProblemId) {
+            setEditorStatus("문항을 먼저 선택하세요.", true);
+            return;
+          }
+          await loadProblemContent(editorProblemId, true);
+          previewCache.delete(editorProblemId);
+          await loadProblemPreview(editorProblemId);
+          setEditorStatus("원본 다시불러오기 완료");
+        });
+      }
+
+      if (manualEditorOpenFolderBtn) {
+        manualEditorOpenFolderBtn.addEventListener("click", async () => {
+          if (!editorProblemId) {
+            setEditorStatus("문항을 먼저 선택하세요.", true);
+            return;
+          }
+          manualEditorOpenFolderBtn.disabled = true;
+          setEditorStatus("문항 폴더를 여는 중입니다...");
+          try {
+            const response = await fetch("/api/problem-open-folder", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ id: editorProblemId }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              const detail = payload && payload.detail ? payload.detail : `HTTP ${response.status}`;
+              throw new Error(detail);
+            }
+            setEditorStatus(`문항 폴더 열기 완료: ${payload.path || editorProblemId}`);
+          } catch (error) {
+            const message = error && error.message ? error.message : "알 수 없는 오류";
+            setEditorStatus(`문항 폴더 열기 실패: ${message}`, true);
+          } finally {
+            manualEditorOpenFolderBtn.disabled = false;
+          }
+        });
+      }
+
+      if (manualEditorPreviewBtn) {
+        manualEditorPreviewBtn.addEventListener("click", async () => {
+          await renderDraftPreviewFromEditor();
+        });
+      }
+
+      if (manualEditorSaveBtn) {
+        manualEditorSaveBtn.addEventListener("click", async () => {
+          await saveProblemContent();
+        });
+      }
+
       setPreviewEmpty(defaultPreviewMessage);
+      clearEditorPane();
       const initialManualOrderIds = uniqueIds(parseIds(manualOrderIdsInput ? manualOrderIdsInput.value : ""));
       const initialManualSelectedIds = uniqueIds(parseIds(manualSelectedIdsInput ? manualSelectedIdsInput.value : ""));
       const initialCheckedIds = initialManualSelectedIds.length ? initialManualSelectedIds : initialManualOrderIds;

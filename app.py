@@ -96,6 +96,17 @@ app = Flask(__name__)
 app.secret_key = "math_kichul_local_admin"
 
 
+def _open_path_in_file_manager(target: Path) -> None:
+    target_path = str(target)
+    if hasattr(os, "startfile"):
+        os.startfile(target_path)  # type: ignore[attr-defined]
+        return
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", target_path], cwd=str(BASE_DIR))
+        return
+    subprocess.Popen(["xdg-open", target_path], cwd=str(BASE_DIR))
+
+
 def _resolve_unique_pdf_path(path: Path) -> Path:
     if not path.exists():
         return path
@@ -621,12 +632,31 @@ def _safe_int_token(raw: str, field_name: str) -> int:
 
 
 def _rewrite_problem_md(path: Path, front: Dict[str, Any], parsed) -> None:
+    _rewrite_problem_md_sections(
+        path,
+        front,
+        q=parsed.q,
+        choices=parsed.choices,
+        answer=parsed.answer,
+        solution=parsed.solution,
+    )
+
+
+def _rewrite_problem_md_sections(
+    path: Path,
+    front: Dict[str, Any],
+    *,
+    q: str,
+    choices: str,
+    answer: str,
+    solution: str,
+) -> None:
     front_text = yaml.safe_dump(front, sort_keys=False, allow_unicode=True).strip()
     body = (
-        f"## Q\n{parsed.q.strip()}\n\n"
-        f"## Choices\n{parsed.choices.strip()}\n\n"
-        f"## Answer\n{parsed.answer.strip()}\n\n"
-        f"## Solution\n{parsed.solution.strip()}\n"
+        f"## Q\n{str(q or '').strip()}\n\n"
+        f"## Choices\n{str(choices or '').strip()}\n\n"
+        f"## Answer\n{str(answer or '').strip()}\n\n"
+        f"## Solution\n{str(solution or '').strip()}\n"
     )
     path.write_text(f"---\n{front_text}\n---\n\n{body}", encoding="utf-8")
 
@@ -688,6 +718,25 @@ def _serialize_problem_meta(problem_id: str, front: Dict[str, Any]) -> Dict[str,
     }
 
 
+def _serialize_problem_sections(parsed) -> Dict[str, str]:
+    return {
+        "q": str(parsed.q or ""),
+        "choices": str(parsed.choices or ""),
+        "answer": str(parsed.answer or ""),
+        "solution": str(parsed.solution or ""),
+    }
+
+
+def _build_preview_payload(problem_id: str, *, q: str, choices: str, answer: str, solution: str) -> Dict[str, Any]:
+    return {
+        "id": problem_id,
+        "question_html": _rewrite_preview_img_sources(_markdown_to_html_preview(q), problem_id),
+        "choices_html": _rewrite_preview_img_sources(_markdown_to_html_preview(choices), problem_id),
+        "answer_html": _rewrite_preview_img_sources(_markdown_to_html_preview(answer), problem_id),
+        "solution_html": _rewrite_preview_img_sources(_markdown_to_html_preview(solution), problem_id),
+    }
+
+
 def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) -> Dict[str, Any]:
     def pick_all_when_empty(name: str) -> List[str]:
         selected = request.args.getlist(name)
@@ -730,6 +779,7 @@ def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) ->
         "show_source_info": request.args.get("show_source_info", "1") != "0",
         "show_unit_info": request.args.get("show_unit_info", "1") != "0",
         "teacher_view": request.args.get("teacher_view", "0") == "1",
+        "reset_question_number_by_school": request.args.get("reset_question_number_by_school", "0") == "1",
         "exam_sheet": request.args.get("exam_sheet", "1") != "0",
         "title": request.args.get(
             "title",
@@ -809,31 +859,121 @@ def problem_preview():
     except Exception as exc:  # pylint: disable=broad-except
         return jsonify({"error": "problem-parse-failed", "detail": str(exc)}), 500
 
-    question_html = _rewrite_preview_img_sources(
-        _markdown_to_html_preview(parsed.q),
-        problem_id,
+    preview = _build_preview_payload(
+        problem_id=problem_id,
+        q=parsed.q,
+        choices=parsed.choices,
+        answer=parsed.answer,
+        solution=parsed.solution,
     )
-    choices_html = _rewrite_preview_img_sources(
-        _markdown_to_html_preview(parsed.choices),
-        problem_id,
-    )
-    answer_html = _rewrite_preview_img_sources(
-        _markdown_to_html_preview(parsed.answer),
-        problem_id,
-    )
-    solution_html = _rewrite_preview_img_sources(
-        _markdown_to_html_preview(parsed.solution),
-        problem_id,
-    )
+    preview["id"] = parsed.display_id
+    preview["warnings"] = parsed.warnings
+    return jsonify(preview)
+
+
+@app.get("/api/problem-content")
+def problem_content():
+    problem_id = request.args.get("id", "").strip()
+    folder = _resolve_problem_folder(problem_id)
+    if folder is None:
+        return jsonify({"error": "problem-not-found"}), 404
+
+    problem_md = folder / "problem.md"
+    if not problem_md.is_file():
+        return jsonify({"error": "problem-file-not-found"}), 404
+
+    try:
+        parsed = parse_problem_file(problem_md)
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": "problem-parse-failed", "detail": str(exc)}), 500
 
     return jsonify(
         {
             "id": parsed.display_id,
-            "question_html": question_html,
-            "choices_html": choices_html,
-            "answer_html": answer_html,
-            "solution_html": solution_html,
+            **_serialize_problem_sections(parsed),
             "warnings": parsed.warnings,
+        }
+    )
+
+
+@app.post("/api/problem-preview-render")
+def problem_preview_render():
+    payload = request.get_json(silent=True) or {}
+    problem_id = str(payload.get("id", "")).strip()
+    if _resolve_problem_folder(problem_id) is None:
+        return jsonify({"error": "problem-not-found"}), 404
+
+    q = str(payload.get("q", "") or "")
+    choices = str(payload.get("choices", "") or "")
+    answer = str(payload.get("answer", "") or "")
+    solution = str(payload.get("solution", "") or "")
+
+    preview = _build_preview_payload(
+        problem_id=problem_id,
+        q=q,
+        choices=choices,
+        answer=answer,
+        solution=solution,
+    )
+    preview["id"] = problem_id
+    return jsonify(preview)
+
+
+@app.post("/api/problem-content")
+def update_problem_content():
+    payload = request.get_json(silent=True) or {}
+    problem_id = str(payload.get("id", "")).strip()
+    folder = _resolve_problem_folder(problem_id)
+    if folder is None:
+        return jsonify({"error": "problem-not-found"}), 404
+
+    problem_md = folder / "problem.md"
+    if not problem_md.is_file():
+        return jsonify({"error": "problem-file-not-found"}), 404
+
+    try:
+        parsed = parse_problem_file(problem_md)
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": "problem-parse-failed", "detail": str(exc)}), 500
+
+    front = dict(parsed.front_matter or {})
+    front["id"] = problem_id
+
+    q = str(payload.get("q", "") or "")
+    choices = str(payload.get("choices", "") or "")
+    answer = str(payload.get("answer", "") or "")
+    solution = str(payload.get("solution", "") or "")
+
+    try:
+        _rewrite_problem_md_sections(
+            problem_md,
+            front,
+            q=q,
+            choices=choices,
+            answer=answer,
+            solution=solution,
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": "write-failed", "detail": str(exc)}), 500
+
+    preview = _build_preview_payload(
+        problem_id=problem_id,
+        q=q,
+        choices=choices,
+        answer=answer,
+        solution=solution,
+    )
+    return jsonify(
+        {
+            "ok": True,
+            "id": problem_id,
+            "sections": {
+                "q": q,
+                "choices": choices,
+                "answer": answer,
+                "solution": solution,
+            },
+            "preview": preview,
         }
     )
 
@@ -988,16 +1128,30 @@ def delete_problem():
     return jsonify({"ok": True, "id": problem_id})
 
 
+@app.post("/api/problem-open-folder")
+def open_problem_folder():
+    payload = request.get_json(silent=True) or {}
+    problem_id = str(payload.get("id", "")).strip()
+    if not problem_id:
+        return jsonify({"error": "invalid-payload", "detail": "'id' is required."}), 400
+
+    folder = _resolve_problem_folder(problem_id)
+    if folder is None:
+        return jsonify({"error": "problem-not-found"}), 404
+
+    try:
+        _open_path_in_file_manager(folder)
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": "open-failed", "detail": str(exc)}), 500
+
+    return jsonify({"ok": True, "id": problem_id, "path": str(folder)})
+
+
 @app.get("/open-output")
 def open_output_folder():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     try:
-        if hasattr(os, "startfile"):
-            os.startfile(str(OUTPUT_DIR))  # type: ignore[attr-defined]
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", str(OUTPUT_DIR)], cwd=str(BASE_DIR))
-        else:
-            subprocess.Popen(["xdg-open", str(OUTPUT_DIR)], cwd=str(BASE_DIR))
+        _open_path_in_file_manager(OUTPUT_DIR)
         flash(f"출력 폴더를 열었습니다: {OUTPUT_DIR}", "success")
     except Exception as exc:  # pylint: disable=broad-except
         flash(f"출력 폴더 열기 실패: {exc}", "warning")
@@ -1042,6 +1196,7 @@ def render_pdf():
     show_source_info = bool(request.form.get("show_source_info"))
     show_unit_info = bool(request.form.get("show_unit_info"))
     teacher_view = bool(request.form.get("teacher_view"))
+    reset_question_number_by_school = bool(request.form.get("reset_question_number_by_school"))
     include_exam_sheet = bool(request.form.get("exam_sheet"))
     append_answer_sheet = bool(request.form.get("answer_sheet"))
     append_solution_sheet = bool(request.form.get("solution_sheet"))
@@ -1136,6 +1291,7 @@ def render_pdf():
             "show_source_info": "1" if show_source_info else "0",
             "show_unit_info": "1" if show_unit_info else "0",
             "teacher_view": "1" if teacher_view else "0",
+            "reset_question_number_by_school": "1" if reset_question_number_by_school else "0",
             "exam_sheet": "1" if include_exam_sheet else "0",
         }
         return redirect(url_for("index", **next_defaults))
@@ -1167,6 +1323,7 @@ def render_pdf():
             "show_source_info": "1" if show_source_info else "0",
             "show_unit_info": "1" if show_unit_info else "0",
             "teacher_view": "1" if teacher_view else "0",
+            "reset_question_number_by_school": "1" if reset_question_number_by_school else "0",
             "exam_sheet": "1" if include_exam_sheet else "0",
             "selector_ids": " ".join(selector_ids),
             "title": request.form.get(
@@ -1213,6 +1370,8 @@ def render_pdf():
         cmd.append("--show-unit-info")
     if teacher_view:
         cmd.append("--teacher-view")
+    if reset_question_number_by_school:
+        cmd.append("--reset-question-number-by-school")
     if not include_exam_sheet:
         cmd.append("--skip-exam")
 
@@ -1282,6 +1441,7 @@ def render_pdf():
         "show_source_info": "1" if show_source_info else "0",
         "show_unit_info": "1" if show_unit_info else "0",
         "teacher_view": "1" if teacher_view else "0",
+        "reset_question_number_by_school": "1" if reset_question_number_by_school else "0",
         "exam_sheet": "1" if include_exam_sheet else "0",
         "selector_ids": " ".join(selector_ids),
         "title": request.form.get(

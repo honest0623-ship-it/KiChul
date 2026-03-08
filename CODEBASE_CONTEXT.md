@@ -5,9 +5,11 @@ Read this first before making changes.
 
 ## 1) Project Summary
 
-- Current project scope: render exam PDFs from existing markdown DB entries and edit per-problem metadata in web admin.
+- Current project scope: render exam PDFs from existing markdown DB entries and edit per-problem metadata/body (`Q/Choices/Answer/Solution`) in web admin.
+- Manual one-off DB ingest scripts for specific source sets still exist under `scripts/` and may be used for repository maintenance.
 - Web app role: filter/select problems and call `build_exam.py`.
-- Ingest/upload/auto-DB-generation workflows were removed on 2026-03-04.
+- Web app ingest/upload/auto-DB-generation workflows were removed on 2026-03-04.
+- Repository-level maintenance may still use standalone manual ingest scripts; these are not part of the Flask UI flow.
 
 ## 2) Quick Start
 
@@ -25,7 +27,7 @@ python app.py
 ## 3) Key Files
 
 - `app.py`: Flask web UI for filtering/selecting problems and PDF generation.
-- `templates/admin.html`: Web admin page (render controls + per-problem metadata edit UI).
+- `templates/admin.html`: Web admin page (render controls + per-problem metadata/body edit UI).
 - `build_exam.py`: CLI entry point for exam/answer/solution PDF generation.
 - `parser.py`: Parses `problem.md` (front-matter + sections).
 - `renderer.py`: HTML/MathJax render and Playwright PDF output.
@@ -51,6 +53,14 @@ python app.py
 5. UI metadata cache is refreshed so filtering/sorting uses updated values.
 6. Optional delete action removes the entire target problem folder from `db/problems`.
 7. Subject values are normalized to subject codes (`COM1/COM2/ALG/CAL1/STAT`) when scanning/saving.
+
+### 4.3 Problem body edit (`GET/POST /api/problem-content`, `POST /api/problem-preview-render`)
+
+1. Select problem from manual-order list.
+2. Load raw section text (`Q/Choices/Answer/Solution`) into in-page editor.
+3. Render draft preview from editor text via preview-render API.
+4. Save writes updated body sections back to `problem.md` while preserving front-matter.
+5. Saved-preview and draft-preview panes refresh for immediate verification.
 
 ## 5) `problem.md` Shape
 
