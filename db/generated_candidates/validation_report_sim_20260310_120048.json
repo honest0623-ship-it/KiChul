@@ -1,0 +1,19 @@
+{
+  "batch_id": "sim_20260310_120048",
+  "validated_at": "2026-03-10T12:15:22",
+  "max_similarity": 0.92,
+  "summary": {
+    "total": 1,
+    "ok": 1,
+    "failed": 0
+  },
+  "results": [
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-007-sim001",
+      "ok": true,
+      "similarity_ratio": 0.455,
+      "errors": [],
+      "warnings": []
+    }
+  ]
+}

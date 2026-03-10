@@ -37,9 +37,8 @@
     .problem-page {
       width: 100%;
       min-height: {{ page_height_mm - margin_top_mm - margin_bottom_mm }}mm;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      column-gap: 0;
+      display: flex;
+      flex-direction: column;
       box-sizing: border-box;
       border-right: var(--line-width) solid var(--line-color);
       break-after: page;
@@ -56,6 +55,28 @@
       min-height: 0;
       display: flex;
       flex-direction: column;
+    }
+
+    .problem-page-body {
+      width: 100%;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: 0;
+      box-sizing: border-box;
+      flex: 1 1 auto;
+    }
+
+    .school-section-header {
+      min-height: 0;
+      box-sizing: border-box;
+      padding: 0.4mm 1.2mm 1.2mm 1.2mm;
+      font-size: calc({{ font_size_pt }}pt + 0.6pt);
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      color: #0f172a;
+      border-bottom: var(--line-width) solid var(--line-color);
+      background: #fff;
     }
 
     .problem-box {
@@ -199,7 +220,7 @@
     .teacher-answer {
       margin-top: 1.2mm;
       padding-top: 0.7mm;
-      border-top: 0.5pt dashed #7a8698;
+      border-top: 0;
       color: #0f172a;
       font-size: calc({{ font_size_pt }}pt - 0.3pt);
       font-weight: 700;
@@ -258,7 +279,7 @@
 
   <div id="problem-pool" class="problem-pool" aria-hidden="true">
     {% for problem in problems %}
-      <section class="problem-card" data-number="{{ problem.number }}">
+      <section class="problem-card" data-number="{{ problem.number }}" data-school="{{ problem.school }}">
         <header class="problem-head">
           <div class="head-left">{{ problem.number }}번</div>
           <div class="head-right">
@@ -297,6 +318,8 @@
       const columnGapMm = 0;
       const columns = 2;
       const boxGapMm = 0;
+      const resetQuestionNumberBySchool = {{ "true" if reset_question_number_by_school else "false" }};
+      const schoolHeaderHeightMm = 6;
 
       function mmToPx(mm) {
         const probe = document.createElement("div");
@@ -327,46 +350,107 @@
         return h;
       }
 
-      function buildPages(items, boxHeightPx) {
+      function buildPageColumns(items, startIdx, boxHeightPx, sectionSchool, enforceSameSchool) {
+        const pageColumns = [];
+        let idx = startIdx;
+
+        for (let col = 0; col < columns && idx < items.length; col += 1) {
+          const first = items[idx];
+          if (enforceSameSchool && first.school !== sectionSchool) break;
+
+          if (first.heightCol > boxHeightPx) {
+            pageColumns.push([first]);
+            idx += 1;
+            continue;
+          }
+
+          const second = items[idx + 1];
+          const secondFits = !!second && second.heightCol <= boxHeightPx;
+          const sameSchool = !enforceSameSchool || (second && second.school === sectionSchool);
+
+          if (secondFits && sameSchool) {
+            pageColumns.push([first, second]);
+            idx += 2;
+          } else {
+            pageColumns.push([first]);
+            idx += 1;
+          }
+        }
+
+        return { columns: pageColumns, nextIdx: idx };
+      }
+
+      function buildPages(items, pageBodyHeightPx, boxGapPx, schoolHeaderHeightPx) {
         const pages = [];
         let idx = 0;
 
-        while (idx < items.length) {
-          const pageColumns = [];
-
-          for (let col = 0; col < columns && idx < items.length; col += 1) {
-            const first = items[idx];
-
-            if (first.heightCol > boxHeightPx) {
-              pageColumns.push([first]);
-              idx += 1;
-              continue;
-            }
-
-            const second = items[idx + 1];
-            if (second && second.heightCol <= boxHeightPx) {
-              pageColumns.push([first, second]);
-              idx += 2;
-            } else {
-              pageColumns.push([first]);
-              idx += 1;
-            }
+        if (!resetQuestionNumberBySchool) {
+          const boxHeightPx = (pageBodyHeightPx - boxGapPx) / 2;
+          while (idx < items.length) {
+            const packed = buildPageColumns(items, idx, boxHeightPx, "", false);
+            pages.push({
+              columns: packed.columns,
+              bodyHeightPx: pageBodyHeightPx,
+              boxHeightPx,
+              sectionHeader: "",
+            });
+            idx = packed.nextIdx;
           }
+          return pages;
+        }
 
-          pages.push(pageColumns);
+        while (idx < items.length) {
+          const sectionSchool = items[idx].school || "";
+          let firstPageOfSection = true;
+
+          while (idx < items.length && items[idx].school === sectionSchool) {
+            const bodyHeightPx = firstPageOfSection
+              ? Math.max(pageBodyHeightPx - schoolHeaderHeightPx, pageBodyHeightPx * 0.5)
+              : pageBodyHeightPx;
+            const boxHeightPx = (bodyHeightPx - boxGapPx) / 2;
+            const packed = buildPageColumns(items, idx, boxHeightPx, sectionSchool, true);
+            const schoolLabel = sectionSchool ? `${sectionSchool}학교` : "학교";
+
+            pages.push({
+              columns: packed.columns,
+              bodyHeightPx,
+              boxHeightPx,
+              sectionHeader: firstPageOfSection ? schoolLabel : "",
+            });
+
+            idx = packed.nextIdx;
+            firstPageOfSection = false;
+          }
         }
 
         return pages;
       }
 
-      function renderPages(root, pages, pageBodyHeightPx, boxHeightPx) {
+      function renderPages(root, pages, pageBodyHeightPx, schoolHeaderHeightPx) {
         root.innerHTML = "";
 
-        pages.forEach((columnsOnPage, pageIndex) => {
+        pages.forEach((pageData, pageIndex) => {
+          const columnsOnPage = pageData.columns || [];
+          const bodyHeightPx = pageData.bodyHeightPx || pageBodyHeightPx;
+          const boxHeightPx = pageData.boxHeightPx || (bodyHeightPx / 2);
+          const sectionHeader = pageData.sectionHeader || "";
+
           const pageEl = document.createElement("section");
           pageEl.className = "problem-page";
           if (pageIndex === pages.length - 1) pageEl.classList.add("last");
           pageEl.style.minHeight = `${pageBodyHeightPx}px`;
+
+          if (sectionHeader) {
+            const headerEl = document.createElement("div");
+            headerEl.className = "school-section-header";
+            headerEl.style.height = `${schoolHeaderHeightPx}px`;
+            headerEl.textContent = sectionHeader;
+            pageEl.appendChild(headerEl);
+          }
+
+          const pageBodyEl = document.createElement("div");
+          pageBodyEl.className = "problem-page-body";
+          pageBodyEl.style.height = `${bodyHeightPx}px`;
 
           for (let col = 0; col < columns; col += 1) {
             const colItems = columnsOnPage[col] || [];
@@ -388,19 +472,20 @@
             } else if (colItems.length === 1) {
               const singleBox = document.createElement("article");
               singleBox.className = "problem-box";
-              singleBox.style.height = `${pageBodyHeightPx}px`;
+              singleBox.style.height = `${bodyHeightPx}px`;
               singleBox.appendChild(colItems[0].card.cloneNode(true));
               colEl.appendChild(singleBox);
             } else {
               const emptyBox = document.createElement("article");
               emptyBox.className = "problem-box";
-              emptyBox.style.height = `${pageBodyHeightPx}px`;
+              emptyBox.style.height = `${bodyHeightPx}px`;
               colEl.appendChild(emptyBox);
             }
 
-            pageEl.appendChild(colEl);
+            pageBodyEl.appendChild(colEl);
           }
 
+          pageEl.appendChild(pageBodyEl);
           root.appendChild(pageEl);
         });
       }
@@ -447,18 +532,19 @@
 
         const colGapPx = columnGapMm * pxPerMm;
         const boxGapPx = boxGapMm * pxPerMm;
+        const schoolHeaderHeightPx = resetQuestionNumberBySchool ? (schoolHeaderHeightMm * pxPerMm) : 0;
         const columnWidthPx = (pageWidthPx - colGapPx * (columns - 1)) / columns;
-        const boxHeightPx = (pageBodyHeightPx - boxGapPx) / 2;
 
         pool.style.width = `${pageWidthPx}px`;
 
         const measured = cards.map((card) => ({
           card,
           heightCol: measureCardHeight(card, columnWidthPx),
+          school: String(card.dataset.school || "").trim().toUpperCase(),
         }));
 
-        const pages = buildPages(measured, boxHeightPx);
-        renderPages(root, pages, pageBodyHeightPx, boxHeightPx);
+        const pages = buildPages(measured, pageBodyHeightPx, boxGapPx, schoolHeaderHeightPx);
+        renderPages(root, pages, pageBodyHeightPx, schoolHeaderHeightPx);
         compactDisplayMathParagraphs(root);
         pool.style.display = "none";
       }

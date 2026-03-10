@@ -1,0 +1,59 @@
+{
+  "batch_id": "sim_20260309_140840",
+  "created_at": "2026-03-09T14:52:20",
+  "provider": "openai",
+  "model": "gpt-5.2-pro",
+  "similarity_type": "parameter_change",
+  "variants_per_seed": 1,
+  "seed_ids": [
+    "HN-2025-G1-S1-MID-103",
+    "HN-2025-G1-S1-MID-104",
+    "HN-2025-G1-S1-MID-105",
+    "HN-2025-G1-S1-MID-106"
+  ],
+  "summary": {
+    "requested_seed_count": 4,
+    "created": 4,
+    "failed": 2,
+    "skipped": 0
+  },
+  "created": [
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-103-sim001",
+      "seed_id": "HN-2025-G1-S1-MID-103",
+      "objective": false,
+      "status": "draft-fallback"
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-104-sim001",
+      "seed_id": "HN-2025-G1-S1-MID-104",
+      "objective": false,
+      "status": "generated"
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-105-sim001",
+      "seed_id": "HN-2025-G1-S1-MID-105",
+      "objective": false,
+      "status": "generated"
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-106-sim001",
+      "seed_id": "HN-2025-G1-S1-MID-106",
+      "objective": false,
+      "status": "draft-fallback"
+    }
+  ],
+  "failed": [
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-103-sim001",
+      "seed_id": "HN-2025-G1-S1-MID-103",
+      "reason": "The read operation timed out"
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-106-sim001",
+      "seed_id": "HN-2025-G1-S1-MID-106",
+      "reason": "The read operation timed out"
+    }
+  ],
+  "skipped": []
+}

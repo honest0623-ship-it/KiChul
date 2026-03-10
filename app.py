@@ -1,15 +1,22 @@
 ﻿from __future__ import annotations
 
 import fnmatch
+from datetime import datetime
+from difflib import SequenceMatcher
 from html import escape
+import json
 import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
+from threading import Lock
 from typing import Any, Dict, List
 from urllib.parse import urlparse
+from urllib import error as urllib_error
+from urllib import parse as urllib_parse
+from urllib import request as urllib_request
 
 from flask import (
     Flask,
@@ -37,6 +44,7 @@ from unit_taxonomy import (
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PROBLEMS_DIR = BASE_DIR / "db" / "problems"
+DB_GENERATED_CANDIDATES_DIR = BASE_DIR / "db" / "generated_candidates"
 OUTPUT_DIR = BASE_DIR / "output"
 VENDOR_DIR = BASE_DIR / "vendor"
 PROBLEM_ID_RE = re.compile(
@@ -55,6 +63,65 @@ MATH_SEGMENT_RE = re.compile(
     r"(\$\$.*?\$\$|\\\[.*?\\\]|\\\(.*?\\\)|\$(?:\\.|[^$\\])+\$)",
     re.DOTALL,
 )
+SIMILAR_BATCH_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+SIMILAR_CANDIDATE_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+GENERATED_PROBLEM_UI_ID_RE = re.compile(r"^GEN::(?P<batch>[^:]+)::(?P<candidate>.+)$")
+DRAFT_TOKEN = "[DRAFT]"
+DATA_SOURCE_VALUES = {"official", "generated"}
+AI_PROVIDER_MODEL_CATALOG: Dict[str, List[str]] = {
+    # Updated against official docs (ai.google.dev / console.groq.com / platform.openai.com) on 2026-03-09.
+    "gemini": [
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-3-pro-preview",
+        "gemini-3.1-pro-preview-09-2025",
+        "gemini-3.1-flash-preview-09-2025",
+        "gemini-3.1-flash-lite-preview-09-2025",
+    ],
+    "groq": [
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "qwen/qwen3-32b",
+        "moonshotai/kimi-k2-instruct-0905",
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "meta-llama/llama-4-scout-17b-16e-instruct",
+        "groq/compound",
+        "groq/compound-mini",
+    ],
+    "openai": [
+        "gpt-5.2",
+        "gpt-5.1",
+        "gpt-5",
+        "gpt-5-mini",
+        "gpt-5-nano",
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+        "o3",
+        "o3-pro",
+        "o4-mini",
+    ],
+}
+AI_SUPPORTED_PROVIDERS = tuple(AI_PROVIDER_MODEL_CATALOG.keys())
+AI_PROVIDER_DEFAULT_MODEL = {
+    "gemini": "gemini-2.5-flash",
+    "groq": "openai/gpt-oss-120b",
+    "openai": "gpt-5-mini",
+}
+AI_RUNTIME_CONFIG = {
+    "provider": "openai",
+    "model": "gpt-5-mini",
+    "api_keys": {"gemini": "", "groq": "", "openai": ""},
+    "updated_at": "",
+}
+AI_CONFIG_LOCK = Lock()
+AI_GENERATE_TIMEOUT_SEC = 120
+AI_GENERATE_OPENAI_TIMEOUT_SEC = 45
+SIMILAR_GENERATION_MAX_ATTEMPTS = 3
+SIMILAR_GENERATION_MAX_SEEDS_PER_REQUEST = 6
+SIMILAR_PROMOTION_ENABLED = False
 
 DEFAULTS = {
     "school": "HN",
@@ -314,6 +381,951 @@ def _resolve_problem_folder(problem_id: str) -> Path | None:
     return folder
 
 
+def _build_generated_problem_ui_id(batch_id: str, candidate_id: str) -> str:
+    return f"GEN::{batch_id}::{candidate_id}"
+
+
+def _parse_generated_problem_ui_id(problem_id: str) -> tuple[str, str] | None:
+    matched = GENERATED_PROBLEM_UI_ID_RE.match(str(problem_id or "").strip())
+    if not matched:
+        return None
+    batch_id = matched.group("batch")
+    candidate_id = matched.group("candidate")
+    return (batch_id, candidate_id)
+
+
+def _list_generated_batch_ids() -> List[str]:
+    if not DB_GENERATED_CANDIDATES_DIR.is_dir():
+        return []
+    rows = set()
+
+    for folder in sorted(DB_GENERATED_CANDIDATES_DIR.iterdir(), key=lambda p: p.name):
+        if not folder.is_dir():
+            continue
+
+        # Flat layout candidate folder
+        if (folder / "problem.md").is_file():
+            batch_id = _extract_generation_batch_id(folder)
+            if batch_id:
+                rows.add(batch_id)
+            continue
+
+        # Legacy nested batch folder
+        if not SIMILAR_BATCH_ID_RE.match(folder.name):
+            continue
+        if _scan_similar_candidate_dirs(folder):
+            rows.add(folder.name)
+
+    return sorted(rows)
+
+
+def _normalize_data_sources(raw_values: List[str]) -> List[str]:
+    normalized: List[str] = []
+    seen = set()
+    for value in raw_values:
+        token = str(value or "").strip().lower()
+        if token not in DATA_SOURCE_VALUES:
+            continue
+        if token in seen:
+            continue
+        seen.add(token)
+        normalized.append(token)
+    if not normalized:
+        return ["official"]
+    return normalized
+
+
+def _normalize_data_source(raw_value: Any) -> str:
+    token = str(raw_value or "").strip().lower()
+    if token in DATA_SOURCE_VALUES:
+        return token
+    return "official"
+
+
+def _normalize_generated_batches(raw_values: List[str], available_batches: List[str]) -> List[str]:
+    available_set = set(available_batches)
+    normalized: List[str] = []
+    seen = set()
+    for value in raw_values:
+        token = str(value or "").strip()
+        if not token or token not in available_set:
+            continue
+        if token in seen:
+            continue
+        seen.add(token)
+        normalized.append(token)
+    return normalized
+
+
+def _resolve_problem_folder_any(problem_id: str) -> Path | None:
+    official = _resolve_problem_folder(problem_id)
+    if official is not None:
+        return official
+
+    parsed = _parse_generated_problem_ui_id(problem_id)
+    if parsed is None:
+        return None
+    batch_id, candidate_id = parsed
+    return _resolve_similar_candidate_folder(batch_id, candidate_id)
+
+
+def _now_iso() -> str:
+    return datetime.now().replace(microsecond=0).isoformat()
+
+
+def _normalize_for_similarity(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").strip()).lower()
+
+
+def _count_choice_lines(choices_text: str) -> int:
+    lines = [line.strip() for line in (choices_text or "").splitlines() if line.strip()]
+    if not lines:
+        return 0
+    pattern = re.compile(r"^(?:[1-9][\).]|[\u2460-\u2469]|[-*])\s*")
+    return sum(1 for line in lines if pattern.match(line))
+
+
+def _latex_balance_issues(text: str) -> List[str]:
+    issues: List[str] = []
+    token = text or ""
+    dollar_count = len(re.findall(r"(?<!\\)\$", token))
+    if dollar_count % 2 != 0:
+        issues.append("Unbalanced inline/display `$` delimiters.")
+    if token.count("\\(") != token.count("\\)"):
+        issues.append("Unbalanced `\\(` and `\\)` delimiters.")
+    if token.count("\\[") != token.count("\\]"):
+        issues.append("Unbalanced `\\[` and `\\]` delimiters.")
+    return issues
+
+
+def _resolve_similar_batch_folder(batch_id: str) -> Path | None:
+    token = (batch_id or "").strip()
+    if not SIMILAR_BATCH_ID_RE.match(token):
+        return None
+    batch_dir = DB_GENERATED_CANDIDATES_DIR / token
+    if not batch_dir.is_dir():
+        # Flat layout keeps candidate folders directly under generated root.
+        if _collect_batch_candidate_dirs(token):
+            return DB_GENERATED_CANDIDATES_DIR
+        return None
+    return batch_dir
+
+
+def _resolve_similar_candidate_folder(batch_id: str, candidate_id: str) -> Path | None:
+    token = (candidate_id or "").strip()
+    if not SIMILAR_CANDIDATE_ID_RE.match(token):
+        return None
+    # 1) Flat layout: db/generated_candidates/<candidate_id>
+    flat_candidate = DB_GENERATED_CANDIDATES_DIR / token
+    if flat_candidate.is_dir() and (flat_candidate / "problem.md").is_file():
+        flat_batch_id = _extract_generation_batch_id(flat_candidate)
+        if flat_batch_id == (batch_id or "").strip():
+            return flat_candidate
+        if not batch_id:
+            return flat_candidate
+
+    # 2) Legacy nested layout: db/generated_candidates/<batch_id>/<candidate_id>
+    batch_dir = DB_GENERATED_CANDIDATES_DIR / str(batch_id or "").strip()
+    nested_candidate = batch_dir / token
+    if nested_candidate.is_dir() and (nested_candidate / "problem.md").is_file():
+        return nested_candidate
+    return None
+
+
+def _scan_flat_similar_candidate_dirs() -> List[Path]:
+    rows: List[Path] = []
+    if not DB_GENERATED_CANDIDATES_DIR.is_dir():
+        return rows
+    for child in sorted(DB_GENERATED_CANDIDATES_DIR.iterdir(), key=lambda p: p.name):
+        if not child.is_dir():
+            continue
+        if (child / "problem.md").is_file():
+            rows.append(child)
+    return rows
+
+
+def _read_front_matter_quiet(problem_md: Path) -> Dict[str, Any]:
+    try:
+        parsed = parse_problem_file(problem_md)
+        if isinstance(parsed.front_matter, dict):
+            return dict(parsed.front_matter)
+    except Exception:
+        return {}
+    return {}
+
+
+def _extract_generation_batch_id(candidate_dir: Path) -> str:
+    problem_md = candidate_dir / "problem.md"
+    if not problem_md.is_file():
+        return ""
+    front = _read_front_matter_quiet(problem_md)
+    token = str(front.get("generation_batch_id", "")).strip()
+    if token and SIMILAR_BATCH_ID_RE.match(token):
+        return token
+    return ""
+
+
+def _collect_batch_candidate_dirs(batch_id: str) -> Dict[str, Path]:
+    token = str(batch_id or "").strip()
+    if not token or not SIMILAR_BATCH_ID_RE.match(token):
+        return {}
+
+    rows: Dict[str, Path] = {}
+
+    # Flat layout candidates tagged by generation_batch_id
+    for candidate_dir in _scan_flat_similar_candidate_dirs():
+        generation_batch_id = _extract_generation_batch_id(candidate_dir)
+        if generation_batch_id != token:
+            continue
+        rows.setdefault(candidate_dir.name, candidate_dir)
+
+    # Legacy nested batch directory support
+    legacy_batch_dir = DB_GENERATED_CANDIDATES_DIR / token
+    if legacy_batch_dir.is_dir():
+        for candidate_dir in _scan_similar_candidate_dirs(legacy_batch_dir):
+            rows.setdefault(candidate_dir.name, candidate_dir)
+
+    return rows
+
+
+def _batch_report_path(batch_id: str, report_kind: str) -> Path:
+    safe_batch_id = _sanitize_batch_id(batch_id) or "batch"
+    safe_kind = _sanitize_batch_id(report_kind) or "report"
+    return DB_GENERATED_CANDIDATES_DIR / f"{safe_kind}_{safe_batch_id}.json"
+
+
+def _mask_secret(secret: str) -> str:
+    token = str(secret or "").strip()
+    if not token:
+        return ""
+    if len(token) <= 4:
+        return "*" * len(token)
+    return "*" * (len(token) - 4) + token[-4:]
+
+
+def _normalize_ai_provider(raw: Any) -> str:
+    token = str(raw or "").strip().lower()
+    if token in AI_SUPPORTED_PROVIDERS:
+        return token
+    return "gemini"
+
+
+def _default_ai_model(provider: str) -> str:
+    provider_token = _normalize_ai_provider(provider)
+    return AI_PROVIDER_DEFAULT_MODEL.get(provider_token, "gemini-2.5-flash")
+
+
+def _model_allowed_for_provider(provider: str, model: str) -> bool:
+    provider_token = _normalize_ai_provider(provider)
+    catalog = AI_PROVIDER_MODEL_CATALOG.get(provider_token, [])
+    target = str(model or "").strip()
+    if not target:
+        return False
+    return target in catalog
+
+
+def _provider_display_name(provider: str) -> str:
+    token = _normalize_ai_provider(provider)
+    if token == "gemini":
+        return "Gemini"
+    if token == "groq":
+        return "Groq"
+    if token == "openai":
+        return "OpenAI"
+    return token
+
+
+def _ensure_runtime_api_keys_unlocked() -> Dict[str, str]:
+    raw = AI_RUNTIME_CONFIG.get("api_keys")
+    keys: Dict[str, str]
+    if isinstance(raw, dict):
+        keys = {str(k).strip().lower(): str(v or "").strip() for k, v in raw.items()}
+    else:
+        keys = {}
+    legacy_gemini_key = str(AI_RUNTIME_CONFIG.get("api_key", "") or "").strip()
+    if legacy_gemini_key and not keys.get("gemini"):
+        keys["gemini"] = legacy_gemini_key
+    for provider in AI_SUPPORTED_PROVIDERS:
+        keys.setdefault(provider, "")
+    AI_RUNTIME_CONFIG["api_keys"] = keys
+    if "api_key" in AI_RUNTIME_CONFIG:
+        AI_RUNTIME_CONFIG.pop("api_key", None)
+    return keys
+
+
+def _normalize_runtime_config_unlocked() -> tuple[str, str, Dict[str, str], str]:
+    provider = _normalize_ai_provider(AI_RUNTIME_CONFIG.get("provider", "gemini"))
+    model = str(AI_RUNTIME_CONFIG.get("model", "") or "").strip() or _default_ai_model(provider)
+    updated_at = str(AI_RUNTIME_CONFIG.get("updated_at", "") or "").strip()
+    keys = _ensure_runtime_api_keys_unlocked()
+    AI_RUNTIME_CONFIG["provider"] = provider
+    AI_RUNTIME_CONFIG["model"] = model
+    AI_RUNTIME_CONFIG["updated_at"] = updated_at
+    return provider, model, keys, updated_at
+
+
+def _serialize_ai_runtime_config() -> Dict[str, Any]:
+    with AI_CONFIG_LOCK:
+        provider, model, keys, updated_at = _normalize_runtime_config_unlocked()
+        api_key = str(keys.get(provider, "") or "").strip()
+
+    return {
+        "provider": provider,
+        "model": model,
+        "has_api_key": bool(api_key),
+        "api_key_masked": _mask_secret(api_key),
+        "updated_at": updated_at,
+        "providers": list(AI_SUPPORTED_PROVIDERS),
+        "models_by_provider": {k: list(v) for k, v in AI_PROVIDER_MODEL_CATALOG.items()},
+        "default_models": dict(AI_PROVIDER_DEFAULT_MODEL),
+    }
+
+
+def _current_ai_runtime_secret() -> Dict[str, str]:
+    with AI_CONFIG_LOCK:
+        provider, model, keys, _ = _normalize_runtime_config_unlocked()
+        api_key = str(keys.get(provider, "") or "").strip()
+    return {"provider": provider, "model": model, "api_key": api_key}
+
+
+def _sanitize_batch_id(raw: str) -> str:
+    token = re.sub(r"[^A-Za-z0-9._-]+", "_", str(raw or "").strip())
+    return token.strip("_")
+
+
+def _sanitize_candidate_id(raw: str) -> str:
+    token = re.sub(r"[^A-Za-z0-9._-]+", "-", str(raw or "").strip())
+    token = re.sub(r"-{2,}", "-", token)
+    return token.strip("-._")
+
+
+def _unique_batch_id(requested: str) -> str:
+    base = _sanitize_batch_id(requested) if requested else datetime.now().strftime("sim_%Y%m%d_%H%M%S")
+    if not base:
+        base = datetime.now().strftime("sim_%Y%m%d_%H%M%S")
+    candidate = base
+    index = 2
+    while (DB_GENERATED_CANDIDATES_DIR / candidate).exists():
+        candidate = f"{base}_{index:03d}"
+        index += 1
+    return candidate
+
+
+def _build_similar_candidate_id(
+    *,
+    seed_id: str,
+    variant_index: int,
+    variants_per_seed: int,
+    batch_dir: Path,
+) -> str:
+    seed_token = _sanitize_candidate_id(seed_id) or "seed"
+    _ = variants_per_seed  # reserved for future policy tuning
+    serial = variant_index if variant_index > 0 else 1
+    candidate = f"{seed_token}-sim{serial:03d}"
+    while (batch_dir / candidate).exists():
+        serial += 1
+        candidate = f"{seed_token}-sim{serial:03d}"
+    return candidate
+
+
+def _seed_ids_from_payload(payload: Dict[str, Any]) -> List[str]:
+    raw_ids = payload.get("seed_ids")
+    ids: List[str] = []
+    if isinstance(raw_ids, list):
+        ids = [str(item or "").strip() for item in raw_ids]
+    elif isinstance(raw_ids, str):
+        ids = _extract_ids(raw_ids)
+    unique: List[str] = []
+    seen = set()
+    for item in ids:
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        unique.append(item)
+    return unique
+
+
+def _as_positive_int(raw: Any, default: int, *, min_value: int = 1, max_value: int = 10) -> int:
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = default
+    if value < min_value:
+        return min_value
+    if value > max_value:
+        return max_value
+    return value
+
+
+def _strip_code_fence(text: str) -> str:
+    token = str(text or "").strip()
+    fenced = re.match(r"^```(?:json|JSON)?\s*([\s\S]*?)\s*```$", token)
+    if fenced:
+        return fenced.group(1).strip()
+    return token
+
+
+def _extract_json_object_text(text: str) -> str:
+    token = _strip_code_fence(text)
+    if token.startswith("{") and token.endswith("}"):
+        return token
+    left = token.find("{")
+    right = token.rfind("}")
+    if left >= 0 and right > left:
+        return token[left : right + 1]
+    return token
+
+
+def _parse_generated_sections(raw_text: str) -> Dict[str, str]:
+    token = _extract_json_object_text(raw_text)
+    payload = json.loads(token)
+    if not isinstance(payload, dict):
+        raise ValueError("Model response is not a JSON object.")
+    sections = {
+        "q": str(payload.get("q", "") or "").strip(),
+        "choices": str(payload.get("choices", "") or "").strip(),
+        "answer": str(payload.get("answer", "") or "").strip(),
+        "solution": str(payload.get("solution", "") or "").strip(),
+    }
+    for key in ("q", "answer", "solution"):
+        if not sections[key]:
+            raise ValueError(f"Generated section `{key}` is empty.")
+    return sections
+
+
+def _extract_gemini_text(response_obj: Dict[str, Any]) -> str:
+    candidates = response_obj.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        raise ValueError("Gemini response missing candidates.")
+    first = candidates[0] if isinstance(candidates[0], dict) else {}
+    content = first.get("content", {}) if isinstance(first, dict) else {}
+    parts = content.get("parts", []) if isinstance(content, dict) else []
+    texts: List[str] = []
+    if isinstance(parts, list):
+        for part in parts:
+            if isinstance(part, dict):
+                text = str(part.get("text", "") or "")
+                if text:
+                    texts.append(text)
+    merged = "\n".join(texts).strip()
+    if merged:
+        return merged
+    if isinstance(first, dict):
+        fallback = str(first.get("text", "") or "").strip()
+        if fallback:
+            return fallback
+    raise ValueError("Gemini response contained no text.")
+
+
+def _call_gemini_json(*, api_key: str, model: str, prompt: str, temperature: float = 0.45) -> Dict[str, Any]:
+    if not api_key:
+        raise ValueError("Gemini API key is not configured.")
+    clean_model = str(model or _default_ai_model("gemini")).strip()
+    if not clean_model:
+        clean_model = _default_ai_model("gemini")
+    endpoint = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{urllib_parse.quote(clean_model, safe='-._')}:generateContent"
+    )
+    query = urllib_parse.urlencode({"key": api_key})
+    url = f"{endpoint}?{query}"
+
+    body = {
+        "contents": [{"parts": [{"text": str(prompt or "")}]}],
+        "generationConfig": {
+            "temperature": float(temperature),
+            "responseMimeType": "application/json",
+        },
+    }
+    data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    req = urllib_request.Request(
+        url,
+        data=data,
+        method="POST",
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib_request.urlopen(req, timeout=AI_GENERATE_TIMEOUT_SEC) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+    except urllib_error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", errors="replace")
+        except Exception:  # pylint: disable=broad-except
+            detail = ""
+        raise ValueError(f"Gemini HTTP {exc.code}: {detail[:400]}") from exc
+    except urllib_error.URLError as exc:
+        raise ValueError(f"Gemini request failed: {exc}") from exc
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Gemini response is not valid JSON: {raw[:400]}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("Gemini response root is not an object.")
+    return parsed
+
+
+def _extract_openai_chat_text(response_obj: Dict[str, Any], *, provider_name: str) -> str:
+    choices = response_obj.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError(f"{provider_name} response missing choices.")
+    first = choices[0] if isinstance(choices[0], dict) else {}
+    message = first.get("message", {}) if isinstance(first, dict) else {}
+    content = message.get("content", "") if isinstance(message, dict) else ""
+    if isinstance(content, str) and content.strip():
+        return content.strip()
+    if isinstance(content, list):
+        text_parts: List[str] = []
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            text = str(part.get("text", "") or "").strip()
+            if text:
+                text_parts.append(text)
+        merged = "\n".join(text_parts).strip()
+        if merged:
+            return merged
+    raise ValueError(f"{provider_name} response contained no text.")
+
+
+def _extract_openai_responses_text(response_obj: Dict[str, Any], *, provider_name: str) -> str:
+    top = str(response_obj.get("output_text", "") or "").strip()
+    if top:
+        return top
+
+    output_items = response_obj.get("output")
+    texts: List[str] = []
+    if isinstance(output_items, list):
+        for item in output_items:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content")
+            if isinstance(content, list):
+                for part in content:
+                    if not isinstance(part, dict):
+                        continue
+                    text = str(part.get("text", "") or "").strip()
+                    if text:
+                        texts.append(text)
+            fallback_text = str(item.get("text", "") or "").strip()
+            if fallback_text:
+                texts.append(fallback_text)
+
+    merged = "\n".join(texts).strip()
+    if merged:
+        return merged
+
+    # Defensive fallback: sometimes compatibility responses may still carry choices.
+    try:
+        return _extract_openai_chat_text(response_obj, provider_name=provider_name)
+    except Exception:  # pylint: disable=broad-except
+        pass
+
+    raise ValueError(f"{provider_name} responses output contained no text.")
+
+
+def _extract_openai_completions_text(response_obj: Dict[str, Any], *, provider_name: str) -> str:
+    choices = response_obj.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError(f"{provider_name} completions response missing choices.")
+    first = choices[0] if isinstance(choices[0], dict) else {}
+    text = str(first.get("text", "") or "").strip()
+    if text:
+        return text
+    raise ValueError(f"{provider_name} completions response contained no text.")
+
+
+def _call_openai_endpoint_json(
+    *,
+    api_key: str,
+    endpoint: str,
+    body: Dict[str, Any],
+    endpoint_name: str,
+    timeout_sec: int,
+) -> Dict[str, Any]:
+    data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    req = urllib_request.Request(
+        endpoint,
+        data=data,
+        method="POST",
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Accept": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+    try:
+        with urllib_request.urlopen(req, timeout=timeout_sec) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+    except urllib_error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", errors="replace")
+        except Exception:  # pylint: disable=broad-except
+            detail = ""
+        raise ValueError(f"OpenAI HTTP {exc.code}: {detail[:400]}") from exc
+    except urllib_error.URLError as exc:
+        raise ValueError(f"OpenAI request failed ({endpoint_name}): {exc}") from exc
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"OpenAI response is not valid JSON ({endpoint_name}): {raw[:400]}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(f"OpenAI response root is not an object ({endpoint_name}).")
+    return parsed
+
+
+def _call_openai_responses_json(*, api_key: str, model: str, prompt: str) -> Dict[str, Any]:
+    clean_model = str(model or _default_ai_model("openai")).strip() or _default_ai_model("openai")
+    body = {
+        "model": clean_model,
+        "input": str(prompt or ""),
+    }
+    return _call_openai_endpoint_json(
+        api_key=api_key,
+        endpoint="https://api.openai.com/v1/responses",
+        body=body,
+        endpoint_name="responses",
+        timeout_sec=AI_GENERATE_OPENAI_TIMEOUT_SEC,
+    )
+
+
+def _call_groq_chat_json(*, api_key: str, model: str, prompt: str, temperature: float = 0.45) -> Dict[str, Any]:
+    if not api_key:
+        raise ValueError("Groq API key is not configured.")
+    clean_model = str(model or _default_ai_model("groq")).strip()
+    if not clean_model:
+        clean_model = _default_ai_model("groq")
+
+    body = {
+        "model": clean_model,
+        "messages": [{"role": "user", "content": str(prompt or "")}],
+        "temperature": float(temperature),
+        "response_format": {"type": "json_object"},
+    }
+    data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    req = urllib_request.Request(
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=data,
+        method="POST",
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Accept": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+    try:
+        with urllib_request.urlopen(req, timeout=AI_GENERATE_TIMEOUT_SEC) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+    except urllib_error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", errors="replace")
+        except Exception:  # pylint: disable=broad-except
+            detail = ""
+        raise ValueError(f"Groq HTTP {exc.code}: {detail[:400]}") from exc
+    except urllib_error.URLError as exc:
+        raise ValueError(f"Groq request failed: {exc}") from exc
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Groq response is not valid JSON: {raw[:400]}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("Groq response root is not an object.")
+    return parsed
+
+
+def _call_openai_chat_json(*, api_key: str, model: str, prompt: str, temperature: float = 0.45) -> Dict[str, Any]:
+    if not api_key:
+        raise ValueError("OpenAI API key is not configured.")
+    clean_model = str(model or _default_ai_model("openai")).strip()
+    if not clean_model:
+        clean_model = _default_ai_model("openai")
+    _ = temperature  # Some OpenAI models only accept default temperature.
+
+    body = {
+        "model": clean_model,
+        "messages": [{"role": "user", "content": str(prompt or "")}],
+    }
+    return _call_openai_endpoint_json(
+        api_key=api_key,
+        endpoint="https://api.openai.com/v1/chat/completions",
+        body=body,
+        endpoint_name="chat.completions",
+        timeout_sec=AI_GENERATE_OPENAI_TIMEOUT_SEC,
+    )
+
+
+def _call_openai_completions_json(*, api_key: str, model: str, prompt: str, temperature: float = 0.45) -> Dict[str, Any]:
+    clean_model = str(model or _default_ai_model("openai")).strip() or _default_ai_model("openai")
+    # Keep compatibility for instruction/completions models.
+    body = {
+        "model": clean_model,
+        "prompt": str(prompt or ""),
+        "temperature": float(temperature),
+    }
+    return _call_openai_endpoint_json(
+        api_key=api_key,
+        endpoint="https://api.openai.com/v1/completions",
+        body=body,
+        endpoint_name="completions",
+        timeout_sec=AI_GENERATE_OPENAI_TIMEOUT_SEC,
+    )
+
+
+def _openai_http_code_from_error(error: Exception) -> int | None:
+    message = str(error or "")
+    matched = re.search(r"OpenAI HTTP (\d+):", message)
+    if not matched:
+        return None
+    try:
+        return int(matched.group(1))
+    except ValueError:
+        return None
+
+
+def _openai_error_allows_fallback(error: Exception) -> bool:
+    code = _openai_http_code_from_error(error)
+    if code in (400, 404, 405, 422):
+        return True
+    message = str(error or "").lower()
+    # Non-HTTP parse/shape errors can still be endpoint-shape mismatch.
+    return (
+        "missing choices" in message
+        or "contained no text" in message
+        or "response root is not an object" in message
+        or "response is not valid json" in message
+    )
+
+
+def _is_generation_retryable_error(message: str) -> bool:
+    token = str(message or "").strip().lower()
+    if not token:
+        return False
+
+    non_retry_tokens = (
+        "http 400",
+        "http 401",
+        "http 402",
+        "http 403",
+        "http 404",
+        "http 405",
+        "http 409",
+        "http 410",
+        "http 422",
+        "http 429",
+        "quota",
+        "rate limit",
+        "access denied",
+        "browser_signature_banned",
+        "owner_action_required",
+        "invalid api key",
+        "api key is not configured",
+        "unsupported value",
+        "unsupported provider",
+        "not supported in the v1/chat/completions endpoint",
+    )
+    if any(item in token for item in non_retry_tokens):
+        return False
+
+    retry_tokens = (
+        "response is not valid json",
+        "response root is not an object",
+        "missing choices",
+        "contained no text",
+        "generated section",
+        "objective choices are insufficient",
+        "still contains draft token",
+        "timed out",
+        "timeout",
+        "request failed",
+        "connection reset",
+        "connection aborted",
+        "temporarily unavailable",
+        "http 500",
+        "http 502",
+        "http 503",
+        "http 504",
+    )
+    return any(item in token for item in retry_tokens)
+
+
+def _is_timeout_generation_error(message: str) -> bool:
+    token = str(message or "").strip().lower()
+    if not token:
+        return False
+    return "timed out" in token or "timeout" in token
+
+
+def _call_ai_model_text(*, provider: str, api_key: str, model: str, prompt: str, temperature: float = 0.45) -> str:
+    token = _normalize_ai_provider(provider)
+    if token == "gemini":
+        response_obj = _call_gemini_json(
+            api_key=api_key,
+            model=model,
+            prompt=prompt,
+            temperature=temperature,
+        )
+        return _extract_gemini_text(response_obj)
+    if token == "groq":
+        response_obj = _call_groq_chat_json(
+            api_key=api_key,
+            model=model,
+            prompt=prompt,
+            temperature=temperature,
+        )
+        return _extract_openai_chat_text(response_obj, provider_name="Groq")
+    if token == "openai":
+        errors: List[str] = []
+
+        # 1) Prefer /v1/responses first for broad model compatibility.
+        try:
+            response_obj = _call_openai_responses_json(
+                api_key=api_key,
+                model=model,
+                prompt=prompt,
+            )
+            return _extract_openai_responses_text(response_obj, provider_name="OpenAI")
+        except Exception as exc:  # pylint: disable=broad-except
+            errors.append(f"responses={exc}")
+            if not _openai_error_allows_fallback(exc):
+                raise
+
+        # 2) Fallback: /v1/chat/completions for chat-native models.
+        try:
+            response_obj = _call_openai_chat_json(
+                api_key=api_key,
+                model=model,
+                prompt=prompt,
+                temperature=temperature,
+            )
+            return _extract_openai_chat_text(response_obj, provider_name="OpenAI")
+        except Exception as exc:  # pylint: disable=broad-except
+            errors.append(f"chat={exc}")
+            if not _openai_error_allows_fallback(exc):
+                raise
+
+        # 3) Final fallback: /v1/completions for legacy completion models.
+        try:
+            response_obj = _call_openai_completions_json(
+                api_key=api_key,
+                model=model,
+                prompt=prompt,
+                temperature=temperature,
+            )
+            return _extract_openai_completions_text(response_obj, provider_name="OpenAI")
+        except Exception as exc:  # pylint: disable=broad-except
+            errors.append(f"completions={exc}")
+            raise ValueError("OpenAI endpoint fallback failed: " + " | ".join(errors)) from exc
+    raise ValueError(f"Unsupported provider: {provider}")
+
+
+def _build_similar_generation_prompt(
+    *,
+    seed_id: str,
+    seed_q: str,
+    seed_choices: str,
+    seed_answer: str,
+    seed_solution: str,
+    grade: str,
+    unit_l1: str,
+    unit_l2: str,
+    unit_l3: str,
+    similarity_type: str,
+    objective: bool,
+    variant_index: int,
+) -> str:
+    objective_rule = (
+        "- 객관식 문항으로 만들고, `choices`에는 5개 선택지(①~⑤)를 줄바꿈으로 제공한다."
+        if objective
+        else "- 주관식 문항으로 만들고, `choices`는 빈 문자열로 둔다."
+    )
+    return (
+        "당신은 한국 고등학교 수학 문항 제작자다.\n"
+        "아래 원문항을 바탕으로 유사하지만 새로운 문항 1개를 생성하라.\n"
+        "반드시 대한민국 고등학교 교육과정 기호를 사용하고, 수식은 markdown LaTeX로 작성하라.\n"
+        "답과 해설은 문항과 일치해야 한다.\n\n"
+        "출력 형식은 반드시 JSON 객체 하나만 출력한다. 다른 텍스트를 절대 붙이지 마라.\n"
+        "JSON keys: q, choices, answer, solution\n\n"
+        "제약:\n"
+        f"- 학년: 고{grade}\n"
+        f"- 단원: {unit_l1} > {unit_l2} > {unit_l3}\n"
+        f"- 변형유형: {similarity_type}\n"
+        f"- 변형번호: {variant_index}\n"
+        "- 문제/정답/해설 모두 한국어로 작성.\n"
+        "- `solution`은 중간 계산을 간결하게 포함하고 최종 결론을 명확히 제시.\n"
+        f"{objective_rule}\n"
+        "- 벡터/미적분 등 해당 학년·단원을 벗어나는 풀이 기호는 사용하지 않는다.\n\n"
+        f"[원본 ID] {seed_id}\n"
+        "[원본 Q]\n"
+        f"{seed_q.strip()}\n\n"
+        "[원본 Choices]\n"
+        f"{seed_choices.strip()}\n\n"
+        "[원본 Answer]\n"
+        f"{seed_answer.strip()}\n\n"
+        "[원본 Solution]\n"
+        f"{seed_solution.strip()}\n"
+    )
+
+
+def _save_source_snapshot(candidate_dir: Path, *, seed_id: str, q: str, choices: str, answer: str, solution: str) -> None:
+    snapshot = (
+        f"# Source Snapshot: {seed_id}\n\n"
+        "## Q\n\n"
+        f"{q.strip()}\n\n"
+        "## Choices\n\n"
+        f"{choices.strip()}\n\n"
+        "## Answer\n\n"
+        f"{answer.strip()}\n\n"
+        "## Solution\n\n"
+        f"{solution.strip()}\n"
+    )
+    (candidate_dir / "source_snapshot.md").write_text(snapshot, encoding="utf-8")
+
+
+def _rewrite_preview_img_sources_from_folder(
+    html_text: str,
+    *,
+    base_folder: Path,
+    endpoint: str,
+    endpoint_values: Dict[str, str],
+) -> str:
+    base = base_folder.resolve()
+
+    def replace(match: re.Match[str]) -> str:
+        before = match.group("before")
+        quote = match.group("quote")
+        src = match.group("src")
+        after = match.group("after")
+
+        source = src.strip()
+        if not source or _is_external_src(source):
+            return match.group(0)
+
+        normalized = source.replace("\\", "/").lstrip("./")
+        if not normalized:
+            return ""
+
+        candidate = (base_folder / normalized).resolve()
+        try:
+            candidate.relative_to(base)
+        except ValueError:
+            return ""
+        if not candidate.is_file():
+            return ""
+
+        resolved = url_for(endpoint, asset_rel=normalized, **endpoint_values)
+        return f"<img{before}src={quote}{resolved}{quote}{after}>"
+
+    return IMG_TAG_RE.sub(replace, html_text)
+
+
 def _is_external_src(src: str) -> bool:
     parsed = urlparse(src)
     return bool(parsed.scheme) or src.startswith("//")
@@ -348,7 +1360,7 @@ def _markdown_to_html_preview(md_text: str) -> str:
 
 
 def _rewrite_preview_img_sources(html_text: str, problem_id: str) -> str:
-    problem_folder = _resolve_problem_folder(problem_id)
+    problem_folder = _resolve_problem_folder_any(problem_id)
     if problem_folder is None:
         return html_text
 
@@ -390,64 +1402,194 @@ def _resolve_mathjax_bundle_uri() -> str:
     return ""
 
 
-def _scan_problem_meta() -> List[Dict[str, str]]:
+def _scan_problem_meta(
+    *,
+    data_sources: List[str] | None = None,
+    generated_batches: List[str] | None = None,
+) -> List[Dict[str, str]]:
     rows: List[Dict[str, str]] = []
-    if not DB_PROBLEMS_DIR.exists():
-        return rows
+    selected_sources = _normalize_data_sources(data_sources or ["official"])
+    include_official = "official" in selected_sources
+    include_generated = "generated" in selected_sources
 
-    for folder in DB_PROBLEMS_DIR.iterdir():
-        if not folder.is_dir():
-            continue
-        matched = PROBLEM_ID_RE.match(folder.name)
-        if not matched:
-            continue
-        front_matter: Dict[str, Any] = {}
-        problem_md = folder / "problem.md"
-        if problem_md.exists():
-            try:
-                parsed = parse_problem_file(problem_md)
-                if isinstance(parsed.front_matter, dict):
-                    front_matter = parsed.front_matter
-            except Exception:
-                front_matter = {}
+    if include_official and DB_PROBLEMS_DIR.exists():
+        for folder in DB_PROBLEMS_DIR.iterdir():
+            if not folder.is_dir():
+                continue
+            matched = PROBLEM_ID_RE.match(folder.name)
+            if not matched:
+                continue
+            front_matter: Dict[str, Any] = {}
+            problem_md = folder / "problem.md"
+            if problem_md.exists():
+                try:
+                    parsed = parse_problem_file(problem_md)
+                    if isinstance(parsed.front_matter, dict):
+                        front_matter = parsed.front_matter
+                except Exception:
+                    front_matter = {}
 
-        source_no = _extract_source_no_from_front_matter(front_matter)
-        if not source_no:
-            source_no = _fallback_source_no(matched.group("number"), front_matter)
-        source_kind = _extract_source_kind(front_matter, matched.group("number"))
-        source_label = _build_source_label(source_no, source_kind)
-        unit = _extract_unit_from_front_matter(front_matter)
-        unit_l1_hint = unit.split(">", 1)[0] if unit else ""
-        level = _extract_level_from_front_matter(front_matter)
-        school = str(front_matter.get("school") or matched.group("school") or "").strip().upper()
-        year = str(front_matter.get("year") or matched.group("year") or "").strip()
-        grade = str(front_matter.get("grade") or matched.group("grade") or "").strip()
-        semester = str(front_matter.get("semester") or matched.group("semester") or "").strip()
-        exam = str(front_matter.get("exam") or matched.group("exam") or "").strip().upper()
-        subject = _normalize_subject_code(
-            front_matter.get("subject"),
-            unit_l1=unit_l1_hint,
-            fallback=matched.group("subject") or "",
+            source_no = _extract_source_no_from_front_matter(front_matter)
+            if not source_no:
+                source_no = _fallback_source_no(matched.group("number"), front_matter)
+            source_kind = _extract_source_kind(front_matter, matched.group("number"))
+            source_label = _build_source_label(source_no, source_kind)
+            unit = _extract_unit_from_front_matter(front_matter)
+            unit_l1_hint = unit.split(">", 1)[0] if unit else ""
+            level = _extract_level_from_front_matter(front_matter)
+            school = str(front_matter.get("school") or matched.group("school") or "").strip().upper()
+            year = str(front_matter.get("year") or matched.group("year") or "").strip()
+            grade = str(front_matter.get("grade") or matched.group("grade") or "").strip()
+            semester = str(front_matter.get("semester") or matched.group("semester") or "").strip()
+            exam = str(front_matter.get("exam") or matched.group("exam") or "").strip().upper()
+            subject = _normalize_subject_code(
+                front_matter.get("subject"),
+                unit_l1=unit_l1_hint,
+                fallback=matched.group("subject") or "",
+            )
+
+            rows.append(
+                {
+                    "id": folder.name,
+                    "problem_id": folder.name,
+                    "display_id": folder.name,
+                    "root_kind": "official",
+                    "batch_id": "",
+                    "folder_path": str(folder),
+                    "school": school,
+                    "year": year,
+                    "grade": grade,
+                    "semester": semester,
+                    "exam": exam,
+                    "subject": subject,
+                    "number": matched.group("number"),
+                    "source_no": source_no,
+                    "source_kind": source_kind,
+                    "source_label": source_label,
+                    "unit": unit,
+                    "level": level,
+                }
+            )
+
+    if include_generated and DB_GENERATED_CANDIDATES_DIR.exists():
+        available_batches = _list_generated_batch_ids()
+        selected_batches = (
+            _normalize_generated_batches(generated_batches or [], available_batches)
+            if generated_batches is not None
+            else list(available_batches)
         )
+        if not selected_batches:
+            selected_batches = list(available_batches)
 
-        rows.append(
-            {
-                "id": folder.name,
-                "school": school,
-                "year": year,
-                "grade": grade,
-                "semester": semester,
-                "exam": exam,
-                "subject": subject,
-                "number": matched.group("number"),
-                "source_no": source_no,
-                "source_kind": source_kind,
-                "source_label": source_label,
-                "unit": unit,
-                "level": level,
-            }
+        for batch_id in selected_batches:
+            candidate_dirs = _collect_batch_candidate_dirs(batch_id)
+            for folder in candidate_dirs.values():
+                front_matter: Dict[str, Any] = {}
+                problem_md = folder / "problem.md"
+                if problem_md.exists():
+                    try:
+                        parsed = parse_problem_file(problem_md)
+                        if isinstance(parsed.front_matter, dict):
+                            front_matter = parsed.front_matter
+                    except Exception:
+                        front_matter = {}
+
+                derived_from = str(front_matter.get("derived_from", "")).strip()
+                matched = PROBLEM_ID_RE.match(derived_from)
+                folder_number = matched.group("number") if matched else "001"
+                source_no = _extract_source_no_from_front_matter(front_matter)
+                if not source_no and matched:
+                    source_no = _fallback_source_no(folder_number, front_matter)
+                source_kind = _extract_source_kind(front_matter, folder_number)
+                source_label = _build_source_label(source_no, source_kind)
+                unit = _extract_unit_from_front_matter(front_matter)
+                unit_l1_hint = unit.split(">", 1)[0] if unit else ""
+                level = _extract_level_from_front_matter(front_matter)
+                school = str(front_matter.get("school") or (matched.group("school") if matched else "") or "").strip().upper()
+                year = str(front_matter.get("year") or (matched.group("year") if matched else "") or "").strip()
+                grade = str(front_matter.get("grade") or (matched.group("grade") if matched else "") or "").strip()
+                semester = str(front_matter.get("semester") or (matched.group("semester") if matched else "") or "").strip()
+                exam = str(front_matter.get("exam") or (matched.group("exam") if matched else "") or "").strip().upper()
+                subject = _normalize_subject_code(
+                    front_matter.get("subject"),
+                    unit_l1=unit_l1_hint,
+                    fallback=(matched.group("subject") if matched else "") or "",
+                )
+                candidate_id = folder.name
+                ui_id = _build_generated_problem_ui_id(batch_id, candidate_id)
+
+                rows.append(
+                    {
+                        "id": ui_id,
+                        "problem_id": candidate_id,
+                        "display_id": candidate_id,
+                        "root_kind": "generated",
+                        "batch_id": batch_id,
+                        "folder_path": str(folder),
+                        "school": school,
+                        "year": year,
+                        "grade": grade,
+                        "semester": semester,
+                        "exam": exam,
+                        "subject": subject,
+                        "number": folder_number if matched else "",
+                        "source_no": source_no,
+                        "source_kind": source_kind,
+                        "source_label": source_label,
+                        "unit": unit,
+                        "level": level,
+                    }
+                )
+
+    return sorted(rows, key=lambda item: (str(item.get("root_kind", "")), str(item.get("batch_id", "")), str(item["id"])))
+
+
+def _pattern_candidates_for_row(row: Dict[str, str]) -> List[str]:
+    problem_id = str(row.get("id", "")).strip()
+    display_id = str(row.get("display_id", "")).strip()
+    candidate_id = str(row.get("problem_id", "")).strip()
+    root_kind = str(row.get("root_kind", "")).strip()
+    batch_id = str(row.get("batch_id", "")).strip()
+    school = str(row.get("school", "")).strip()
+    year = str(row.get("year", "")).strip()
+    grade = str(row.get("grade", "")).strip()
+    semester = str(row.get("semester", "")).strip()
+    exam = str(row.get("exam", "")).strip()
+    subject = str(row.get("subject", "")).strip()
+    source_label = str(row.get("source_label", "")).strip()
+
+    exam_token = f"{school}.{year}.G{grade}.S{semester}.{exam}{f'({subject})' if subject else ''}"
+    exam_token_dash = f"{school}-{year}-G{grade}-S{semester}-{exam}{f'({subject})' if subject else ''}"
+    exam_token_space = f"{school} {year} G{grade} S{semester} {exam}{f'({subject})' if subject else ''}".strip()
+    id_no_number = re.sub(r"-\d{3}$", "", problem_id)
+
+    return [
+        token
+        for token in (
+            problem_id,
+            display_id,
+            candidate_id,
+            id_no_number,
+            exam_token,
+            exam_token_dash,
+            exam_token_space,
+            source_label,
+            root_kind,
+            batch_id,
+            f"{batch_id}/{candidate_id}" if batch_id and candidate_id else "",
         )
-    return sorted(rows, key=lambda item: item["id"])
+        if token
+    ]
+
+
+def _matches_pattern_for_row(row: Dict[str, str], pattern: str) -> bool:
+    token = str(pattern or "").strip()
+    if not token:
+        return True
+    for candidate in _pattern_candidates_for_row(row):
+        if fnmatch.fnmatch(candidate, token):
+            return True
+    return False
 
 
 def _distinct_values(rows: List[Dict[str, str]], key: str, numeric: bool = False) -> List[str]:
@@ -608,10 +1750,12 @@ def _apply_manual_order(
     return ordered, missing
 
 
-def _build_pdf_filter_options(problem_meta: List[Dict[str, str]]) -> Dict[str, Any]:
+def _build_pdf_filter_options(problem_meta: List[Dict[str, str]], *, generated_batches: List[str]) -> Dict[str, Any]:
     source_labels = set(_distinct_values(problem_meta, "source_label"))
     source_labels.update(DEFAULT_SOURCE_LABELS)
     return {
+        "data_sources": ["official", "generated"],
+        "generated_batches": list(generated_batches),
         "schools": _distinct_values(problem_meta, "school"),
         "years": _distinct_values(problem_meta, "year", numeric=True),
         "grades": _distinct_values(problem_meta, "grade", numeric=True),
@@ -661,9 +1805,37 @@ def _rewrite_problem_md_sections(
     path.write_text(f"---\n{front_text}\n---\n\n{body}", encoding="utf-8")
 
 
+def _id_groups_for_problem_meta(problem_id: str, front: Dict[str, Any]) -> Dict[str, str]:
+    candidates: List[str] = [str(problem_id or "").strip()]
+    parsed_generated = _parse_generated_problem_ui_id(problem_id)
+    if parsed_generated is not None:
+        _, candidate_id = parsed_generated
+        candidates.extend(
+            [
+                str(front.get("derived_from", "")).strip(),
+                str(front.get("id", "")).strip(),
+                str(candidate_id or "").strip(),
+            ]
+        )
+    else:
+        candidates.extend(
+            [
+                str(front.get("id", "")).strip(),
+                str(front.get("derived_from", "")).strip(),
+            ]
+        )
+
+    for token in candidates:
+        if not token:
+            continue
+        matched = PROBLEM_ID_RE.match(token)
+        if matched:
+            return matched.groupdict()
+    return {}
+
+
 def _serialize_problem_meta(problem_id: str, front: Dict[str, Any]) -> Dict[str, Any]:
-    matched = PROBLEM_ID_RE.match(problem_id)
-    from_id = matched.groupdict() if matched else {}
+    from_id = _id_groups_for_problem_meta(problem_id, front)
     school = str(front.get("school") or from_id.get("school") or "").strip().upper()
     year = str(front.get("year") or from_id.get("year") or "").strip()
     grade = str(front.get("grade") or from_id.get("grade") or "").strip()
@@ -718,6 +1890,19 @@ def _serialize_problem_meta(problem_id: str, front: Dict[str, Any]) -> Dict[str,
     }
 
 
+def _refresh_problem_meta_row(problem_id: str) -> Dict[str, Any] | None:
+    parsed_generated = _parse_generated_problem_ui_id(problem_id)
+    if parsed_generated is None:
+        rows = _scan_problem_meta(data_sources=["official"], generated_batches=None)
+    else:
+        batch_id, _ = parsed_generated
+        rows = _scan_problem_meta(data_sources=["generated"], generated_batches=[batch_id])
+    for row in rows:
+        if str(row.get("id", "")).strip() == problem_id:
+            return row
+    return None
+
+
 def _serialize_problem_sections(parsed) -> Dict[str, str]:
     return {
         "q": str(parsed.q or ""),
@@ -737,6 +1922,105 @@ def _build_preview_payload(problem_id: str, *, q: str, choices: str, answer: str
     }
 
 
+def _build_similar_preview_payload(
+    *,
+    batch_id: str,
+    candidate_id: str,
+    q: str,
+    choices: str,
+    answer: str,
+    solution: str,
+) -> Dict[str, Any]:
+    candidate_folder = _resolve_similar_candidate_folder(batch_id, candidate_id)
+    if candidate_folder is None:
+        question_html = _markdown_to_html_preview(q)
+        choices_html = _markdown_to_html_preview(choices)
+        answer_html = _markdown_to_html_preview(answer)
+        solution_html = _markdown_to_html_preview(solution)
+    else:
+        endpoint_values = {"batch_id": batch_id, "candidate_id": candidate_id}
+        question_html = _rewrite_preview_img_sources_from_folder(
+            _markdown_to_html_preview(q),
+            base_folder=candidate_folder,
+            endpoint="similar_asset",
+            endpoint_values=endpoint_values,
+        )
+        choices_html = _rewrite_preview_img_sources_from_folder(
+            _markdown_to_html_preview(choices),
+            base_folder=candidate_folder,
+            endpoint="similar_asset",
+            endpoint_values=endpoint_values,
+        )
+        answer_html = _rewrite_preview_img_sources_from_folder(
+            _markdown_to_html_preview(answer),
+            base_folder=candidate_folder,
+            endpoint="similar_asset",
+            endpoint_values=endpoint_values,
+        )
+        solution_html = _rewrite_preview_img_sources_from_folder(
+            _markdown_to_html_preview(solution),
+            base_folder=candidate_folder,
+            endpoint="similar_asset",
+            endpoint_values=endpoint_values,
+        )
+    return {
+        "id": candidate_id,
+        "question_html": question_html,
+        "choices_html": choices_html,
+        "answer_html": answer_html,
+        "solution_html": solution_html,
+    }
+
+
+def _next_problem_id_for_prefix(prefix: str) -> str:
+    if not prefix:
+        raise ValueError("empty prefix")
+    used_numbers: set[int] = set()
+    if DB_PROBLEMS_DIR.is_dir():
+        for folder in DB_PROBLEMS_DIR.iterdir():
+            if not folder.is_dir():
+                continue
+            matched = PROBLEM_ID_RE.match(folder.name)
+            if not matched:
+                continue
+            row_prefix = folder.name.rsplit("-", 1)[0]
+            if row_prefix != prefix:
+                continue
+            number_token = matched.group("number")
+            if number_token.isdigit():
+                used_numbers.add(int(number_token))
+    candidate = (max(used_numbers) + 1) if used_numbers else 1
+    if candidate > 999:
+        raise ValueError(f"No available 3-digit number for prefix `{prefix}`.")
+    return f"{prefix}-{candidate:03d}"
+
+
+def _scan_similar_candidate_dirs(batch_dir: Path) -> List[Path]:
+    rows: List[Path] = []
+    if not batch_dir.is_dir():
+        return rows
+    for child in sorted(batch_dir.iterdir(), key=lambda p: p.name):
+        if not child.is_dir():
+            continue
+        if not (child / "problem.md").is_file():
+            continue
+        rows.append(child)
+    return rows
+
+
+def _objective_like_candidate(front: Dict[str, Any], candidate_id: str) -> bool:
+    kind = str(front.get("source_question_kind", "")).strip().lower()
+    if kind in {"objective", "obj", "multiple"}:
+        return True
+    if kind in {"subjective", "subj", "essay"}:
+        return False
+    derived = str(front.get("derived_from", "")).strip()
+    matched = PROBLEM_ID_RE.match(derived) or PROBLEM_ID_RE.match(candidate_id)
+    if not matched:
+        return True
+    return int(matched.group("number")) < 100
+
+
 def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) -> Dict[str, Any]:
     def pick_all_when_empty(name: str) -> List[str]:
         selected = request.args.getlist(name)
@@ -751,13 +2035,18 @@ def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) ->
     legacy_sort_field = request.args.get("sort_field", "")
     sort_field_slots = _normalize_sort_field_slots(
         [
-            request.args.get("sort_field_1", legacy_sort_field or "default"),
+            request.args.get("sort_field_1", legacy_sort_field or "source"),
             request.args.get("sort_field_2", "none"),
             request.args.get("sort_field_3", "none"),
         ]
     )
 
+    selected_data_source = _normalize_data_source(
+        request.args.get("data_source", "") or (request.args.getlist("data_sources")[:1] or ["official"])[0]
+    )
+
     return {
+        "data_source": selected_data_source,
         "schools": pick_all_when_empty("schools"),
         "years": pick_all_when_empty("years"),
         "grades": pick_all_when_empty("grades"),
@@ -791,8 +2080,13 @@ def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) ->
 @app.get("/")
 def index():
     defaults = _current_defaults()
-    problem_meta = _scan_problem_meta()
-    pdf_options = _build_pdf_filter_options(problem_meta)
+    available_generated_batches = _list_generated_batch_ids()
+
+    problem_meta = _scan_problem_meta(
+        data_sources=["official", "generated"],
+        generated_batches=available_generated_batches,
+    )
+    pdf_options = _build_pdf_filter_options(problem_meta, generated_batches=available_generated_batches)
     pdf_selected = _read_pdf_selected(defaults, pdf_options)
     return render_template(
         "admin.html",
@@ -823,7 +2117,7 @@ def vendor_asset(asset_rel: str):
 
 @app.get("/api/problem-asset/<problem_id>/<path:asset_rel>")
 def problem_asset(problem_id: str, asset_rel: str):
-    folder = _resolve_problem_folder(problem_id)
+    folder = _resolve_problem_folder_any(problem_id)
     if folder is None:
         abort(404)
 
@@ -843,10 +2137,30 @@ def problem_asset(problem_id: str, asset_rel: str):
     return send_from_directory(str(folder), rel_path)
 
 
+@app.get("/api/similar-asset/<batch_id>/<candidate_id>/<path:asset_rel>")
+def similar_asset(batch_id: str, candidate_id: str, asset_rel: str):
+    folder = _resolve_similar_candidate_folder(batch_id, candidate_id)
+    if folder is None:
+        abort(404)
+
+    rel_path = (asset_rel or "").replace("\\", "/").strip()
+    if not rel_path:
+        abort(404)
+
+    target = (folder / rel_path).resolve()
+    try:
+        target.relative_to(folder.resolve())
+    except ValueError:
+        abort(403)
+    if not target.is_file():
+        abort(404)
+    return send_from_directory(str(folder), rel_path)
+
+
 @app.get("/api/problem-preview")
 def problem_preview():
     problem_id = request.args.get("id", "").strip()
-    folder = _resolve_problem_folder(problem_id)
+    folder = _resolve_problem_folder_any(problem_id)
     if folder is None:
         return jsonify({"error": "problem-not-found"}), 404
 
@@ -874,7 +2188,7 @@ def problem_preview():
 @app.get("/api/problem-content")
 def problem_content():
     problem_id = request.args.get("id", "").strip()
-    folder = _resolve_problem_folder(problem_id)
+    folder = _resolve_problem_folder_any(problem_id)
     if folder is None:
         return jsonify({"error": "problem-not-found"}), 404
 
@@ -900,7 +2214,7 @@ def problem_content():
 def problem_preview_render():
     payload = request.get_json(silent=True) or {}
     problem_id = str(payload.get("id", "")).strip()
-    if _resolve_problem_folder(problem_id) is None:
+    if _resolve_problem_folder_any(problem_id) is None:
         return jsonify({"error": "problem-not-found"}), 404
 
     q = str(payload.get("q", "") or "")
@@ -923,7 +2237,7 @@ def problem_preview_render():
 def update_problem_content():
     payload = request.get_json(silent=True) or {}
     problem_id = str(payload.get("id", "")).strip()
-    folder = _resolve_problem_folder(problem_id)
+    folder = _resolve_problem_folder_any(problem_id)
     if folder is None:
         return jsonify({"error": "problem-not-found"}), 404
 
@@ -937,7 +2251,16 @@ def update_problem_content():
         return jsonify({"error": "problem-parse-failed", "detail": str(exc)}), 500
 
     front = dict(parsed.front_matter or {})
-    front["id"] = problem_id
+    parsed_generated = _parse_generated_problem_ui_id(problem_id)
+    if parsed_generated is None:
+        front["id"] = problem_id
+    else:
+        _, candidate_id = parsed_generated
+        existing_id = str(front.get("id", "")).strip()
+        if existing_id:
+            front["id"] = existing_id
+        elif candidate_id:
+            front["id"] = candidate_id
 
     q = str(payload.get("q", "") or "")
     choices = str(payload.get("choices", "") or "")
@@ -981,7 +2304,7 @@ def update_problem_content():
 @app.get("/api/problem-meta")
 def problem_meta():
     problem_id = request.args.get("id", "").strip()
-    folder = _resolve_problem_folder(problem_id)
+    folder = _resolve_problem_folder_any(problem_id)
     if folder is None:
         return jsonify({"error": "problem-not-found"}), 404
 
@@ -1003,7 +2326,7 @@ def problem_meta():
 def update_problem_meta():
     payload = request.get_json(silent=True) or {}
     problem_id = str(payload.get("id", "")).strip()
-    folder = _resolve_problem_folder(problem_id)
+    folder = _resolve_problem_folder_any(problem_id)
     if folder is None:
         return jsonify({"error": "problem-not-found"}), 404
 
@@ -1017,8 +2340,8 @@ def update_problem_meta():
         return jsonify({"error": "problem-parse-failed", "detail": str(exc)}), 500
 
     front = dict(parsed.front_matter or {})
-    matched = PROBLEM_ID_RE.match(problem_id)
-    from_id = matched.groupdict() if matched else {}
+    from_id = _id_groups_for_problem_meta(problem_id, front)
+    parsed_generated = _parse_generated_problem_ui_id(problem_id)
 
     def _pick(name: str, fallback: str = "") -> str:
         if name not in payload:
@@ -1082,7 +2405,15 @@ def update_problem_meta():
     except ValueError as exc:
         return jsonify({"error": "invalid-payload", "detail": str(exc)}), 400
 
-    front["id"] = problem_id
+    if parsed_generated is None:
+        front["id"] = problem_id
+    else:
+        _, candidate_id = parsed_generated
+        existing_id = str(front.get("id", "")).strip()
+        if existing_id:
+            front["id"] = existing_id
+        elif candidate_id:
+            front["id"] = candidate_id
     front["school"] = school
     front["year"] = year_value
     front["grade"] = grade_value
@@ -1105,7 +2436,9 @@ def update_problem_meta():
     except Exception as exc:  # pylint: disable=broad-except
         return jsonify({"error": "write-failed", "detail": str(exc)}), 500
 
-    refreshed = _serialize_problem_meta(problem_id, front)
+    refreshed = _refresh_problem_meta_row(problem_id)
+    if refreshed is None:
+        refreshed = _serialize_problem_meta(problem_id, front)
     return jsonify({"ok": True, "id": problem_id, "row": refreshed})
 
 
@@ -1135,7 +2468,7 @@ def open_problem_folder():
     if not problem_id:
         return jsonify({"error": "invalid-payload", "detail": "'id' is required."}), 400
 
-    folder = _resolve_problem_folder(problem_id)
+    folder = _resolve_problem_folder_any(problem_id)
     if folder is None:
         return jsonify({"error": "problem-not-found"}), 404
 
@@ -1145,6 +2478,881 @@ def open_problem_folder():
         return jsonify({"error": "open-failed", "detail": str(exc)}), 500
 
     return jsonify({"ok": True, "id": problem_id, "path": str(folder)})
+
+
+@app.get("/api/ai-config")
+def get_ai_config():
+    return jsonify(_serialize_ai_runtime_config())
+
+
+@app.post("/api/ai-config")
+def update_ai_config():
+    payload = request.get_json(silent=True) or {}
+
+    provider_input = str(payload.get("provider", "gemini") or "gemini").strip().lower()
+    if provider_input and provider_input not in AI_SUPPORTED_PROVIDERS:
+        return jsonify({"error": "invalid-payload", "detail": f"Unsupported provider: {provider_input}"}), 400
+    provider = _normalize_ai_provider(provider_input)
+
+    model = str(payload.get("model", "") or "").strip() or _default_ai_model(provider)
+    if not _model_allowed_for_provider(provider, model):
+        return (
+            jsonify(
+                {
+                    "error": "invalid-payload",
+                    "detail": f"Unsupported model for provider `{provider}`: {model}",
+                }
+            ),
+            400,
+        )
+    clear_api_key = bool(payload.get("clear_api_key"))
+    api_key_raw = payload.get("api_key", None)
+
+    changed = False
+    with AI_CONFIG_LOCK:
+        current_provider, _, keys, _ = _normalize_runtime_config_unlocked()
+        if current_provider != provider:
+            AI_RUNTIME_CONFIG["provider"] = provider
+            changed = True
+
+        if str(AI_RUNTIME_CONFIG.get("model", "")).strip() != model:
+            AI_RUNTIME_CONFIG["model"] = model
+            changed = True
+
+        if clear_api_key:
+            if str(keys.get(provider, "")).strip():
+                keys[provider] = ""
+                changed = True
+        elif api_key_raw is not None:
+            token = str(api_key_raw or "").strip()
+            if token and token != str(keys.get(provider, "")).strip():
+                keys[provider] = token
+                changed = True
+
+        if changed:
+            AI_RUNTIME_CONFIG["updated_at"] = _now_iso()
+
+    summary = _serialize_ai_runtime_config()
+    return jsonify({"ok": True, **summary})
+
+
+@app.post("/api/similar-generate")
+def generate_similar_candidates():
+    payload = request.get_json(silent=True) or {}
+    seed_ids = _seed_ids_from_payload(payload)
+    if not seed_ids:
+        return jsonify({"error": "invalid-payload", "detail": "seed_ids is required."}), 400
+    if len(seed_ids) > SIMILAR_GENERATION_MAX_SEEDS_PER_REQUEST:
+        return (
+            jsonify(
+                {
+                    "error": "too-many-seeds",
+                    "detail": (
+                        f"seed_ids can contain up to {SIMILAR_GENERATION_MAX_SEEDS_PER_REQUEST} items per request. "
+                        "Split into smaller chunks and retry."
+                    ),
+                }
+            ),
+            400,
+        )
+
+    variants_per_seed = _as_positive_int(payload.get("variants_per_seed"), 1, min_value=1, max_value=5)
+    similarity_type = str(payload.get("similarity_type", "parameter_change") or "parameter_change").strip()
+    requested_batch_id = str(payload.get("batch_id", "") or "").strip()
+    temperature_raw = payload.get("temperature", 0.45)
+    try:
+        temperature = float(temperature_raw)
+    except (TypeError, ValueError):
+        temperature = 0.45
+    if temperature < 0.0:
+        temperature = 0.0
+    if temperature > 1.0:
+        temperature = 1.0
+
+    ai = _current_ai_runtime_secret()
+    provider = _normalize_ai_provider(ai.get("provider", "gemini"))
+    if provider not in AI_SUPPORTED_PROVIDERS:
+        return jsonify({"error": "provider-not-supported", "detail": f"Unsupported provider: {provider}"}), 400
+    api_key = ai.get("api_key", "")
+    if not api_key:
+        provider_label = _provider_display_name(provider)
+        return jsonify({"error": "ai-not-configured", "detail": f"{provider_label} API key is not set."}), 400
+
+    model_from_payload = str(payload.get("model", "") or "").strip()
+    model = model_from_payload or ai.get("model", _default_ai_model(provider))
+    if not model:
+        model = _default_ai_model(provider)
+    if not _model_allowed_for_provider(provider, model):
+        return (
+            jsonify(
+                {
+                    "error": "invalid-payload",
+                    "detail": f"Unsupported model for provider `{provider}`: {model}",
+                }
+            ),
+            400,
+        )
+
+    DB_GENERATED_CANDIDATES_DIR.mkdir(parents=True, exist_ok=True)
+    batch_id = _unique_batch_id(requested_batch_id)
+
+    created_rows: List[Dict[str, Any]] = []
+    failed_rows: List[Dict[str, Any]] = []
+    skipped_rows: List[Dict[str, Any]] = []
+
+    for seed_id in seed_ids:
+        seed_folder = _resolve_problem_folder(seed_id)
+        if seed_folder is None:
+            skipped_rows.append({"seed_id": seed_id, "reason": "seed-not-found"})
+            continue
+        seed_md = seed_folder / "problem.md"
+        if not seed_md.is_file():
+            skipped_rows.append({"seed_id": seed_id, "reason": "seed-problem-md-not-found"})
+            continue
+
+        try:
+            seed_parsed = parse_problem_file(seed_md)
+        except Exception as exc:  # pylint: disable=broad-except
+            skipped_rows.append({"seed_id": seed_id, "reason": f"seed-parse-failed: {exc}"})
+            continue
+
+        seed_front = dict(seed_parsed.front_matter or {})
+        objective = _objective_like_candidate(seed_front, seed_id)
+        grade = str(seed_front.get("grade", "") or "").strip()
+        raw_unit = str(seed_front.get("unit", "") or "").strip()
+        unit_l1, unit_l2, unit_l3 = normalize_unit_triplet(
+            str(seed_front.get("unit_l1", "")).strip(),
+            str(seed_front.get("unit_l2", "")).strip(),
+            str(seed_front.get("unit_l3", "")).strip(),
+            unit_path=raw_unit,
+            grade=_parse_int(grade, 0) or None,
+        )
+
+        for variant_index in range(1, variants_per_seed + 1):
+            candidate_id = _build_similar_candidate_id(
+                seed_id=seed_id,
+                variant_index=variant_index,
+                variants_per_seed=variants_per_seed,
+                batch_dir=DB_GENERATED_CANDIDATES_DIR,
+            )
+            candidate_dir = DB_GENERATED_CANDIDATES_DIR / candidate_id
+            candidate_dir.mkdir(parents=True, exist_ok=False)
+
+            prompt = _build_similar_generation_prompt(
+                seed_id=seed_id,
+                seed_q=seed_parsed.q,
+                seed_choices=seed_parsed.choices,
+                seed_answer=seed_parsed.answer,
+                seed_solution=seed_parsed.solution,
+                grade=grade or "?",
+                unit_l1=unit_l1 or "?",
+                unit_l2=unit_l2 or "?",
+                unit_l3=unit_l3 or "?",
+                similarity_type=similarity_type,
+                objective=objective,
+                variant_index=variant_index,
+            )
+            (candidate_dir / "prompt.md").write_text(prompt, encoding="utf-8")
+            _save_source_snapshot(
+                candidate_dir,
+                seed_id=seed_id,
+                q=seed_parsed.q,
+                choices=seed_parsed.choices,
+                answer=seed_parsed.answer,
+                solution=seed_parsed.solution,
+            )
+
+            front = dict(seed_front)
+            front["id"] = candidate_id
+            front["derived_from"] = seed_id
+            front["similarity_type"] = similarity_type
+            front["generation_batch_id"] = batch_id
+            front["generation_model"] = f"{provider}:{model}"
+            front["review_status"] = "pending"
+            front["review_note"] = ""
+            front["promoted_to"] = ""
+            front["generated_at"] = _now_iso()
+
+            generated_sections: Dict[str, str] | None = None
+            last_error = ""
+            attempt_prompt = prompt
+            active_model = model
+            model_used_for_candidate = model
+            fallback_downgraded = False
+            for attempt in range(1, SIMILAR_GENERATION_MAX_ATTEMPTS + 1):
+                try:
+                    text = _call_ai_model_text(
+                        provider=provider,
+                        api_key=api_key,
+                        model=active_model,
+                        prompt=attempt_prompt,
+                        temperature=temperature,
+                    )
+                    candidate_sections = _parse_generated_sections(text)
+                    if objective and _count_choice_lines(candidate_sections.get("choices", "")) < 4:
+                        raise ValueError("Generated objective choices are insufficient.")
+                    if any(DRAFT_TOKEN in candidate_sections.get(key, "") for key in ("q", "choices", "answer", "solution")):
+                        raise ValueError("Generated output still contains draft token.")
+                    generated_sections = candidate_sections
+                    model_used_for_candidate = active_model
+                    break
+                except Exception as exc:  # pylint: disable=broad-except
+                    last_error = str(exc).strip() or exc.__class__.__name__
+                    if provider == "openai" and (not fallback_downgraded) and _is_timeout_generation_error(last_error):
+                        fallback_model = _default_ai_model("openai")
+                        if fallback_model and fallback_model != active_model:
+                            active_model = fallback_model
+                            fallback_downgraded = True
+                            continue
+                    should_retry = (
+                        attempt < SIMILAR_GENERATION_MAX_ATTEMPTS
+                        and _is_generation_retryable_error(last_error)
+                    )
+                    if not should_retry:
+                        break
+                    attempt_prompt = (
+                        f"{prompt}\n\n"
+                        "직전 출력은 형식 검증에 실패했다. 아래 오류를 반영해 JSON만 다시 출력하라.\n"
+                        f"- 오류: {last_error}\n"
+                    )
+                    continue
+
+            front["generation_model"] = f"{provider}:{model_used_for_candidate}"
+
+            if generated_sections is None:
+                failed_rows.append(
+                    {
+                        "candidate_id": candidate_id,
+                        "seed_id": seed_id,
+                        "reason": last_error or "unknown-generation-error",
+                    }
+                )
+                generated_sections = {
+                    "q": f"{DRAFT_TOKEN} generation failed. seed={seed_id}",
+                    "choices": "1) \n2) \n3) \n4) \n5) " if objective else "",
+                    "answer": f"{DRAFT_TOKEN} generation failed",
+                    "solution": f"{DRAFT_TOKEN} generation failed",
+                }
+                front["review_note"] = f"auto-generation failed: {last_error}".strip()
+
+            try:
+                _rewrite_problem_md_sections(
+                    candidate_dir / "problem.md",
+                    front,
+                    q=generated_sections["q"],
+                    choices=generated_sections["choices"],
+                    answer=generated_sections["answer"],
+                    solution=generated_sections["solution"],
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                failed_rows.append(
+                    {
+                        "candidate_id": candidate_id,
+                        "seed_id": seed_id,
+                        "reason": f"write-failed: {exc}",
+                    }
+                )
+                continue
+
+            created_rows.append(
+                {
+                    "candidate_id": candidate_id,
+                    "seed_id": seed_id,
+                    "objective": objective,
+                    "status": "generated" if DRAFT_TOKEN not in generated_sections["q"] else "draft-fallback",
+                }
+            )
+
+    manifest = {
+        "batch_id": batch_id,
+        "created_at": _now_iso(),
+        "provider": provider,
+        "model": model,
+        "similarity_type": similarity_type,
+        "variants_per_seed": variants_per_seed,
+        "seed_ids": seed_ids,
+        "summary": {
+            "requested_seed_count": len(seed_ids),
+            "created": len(created_rows),
+            "failed": len(failed_rows),
+            "skipped": len(skipped_rows),
+        },
+        "created": created_rows,
+        "failed": failed_rows,
+        "skipped": skipped_rows,
+    }
+    manifest_path = _batch_report_path(batch_id, "manifest")
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return jsonify(
+        {
+            "ok": True,
+            "batch_id": batch_id,
+            "batch_path": str(DB_GENERATED_CANDIDATES_DIR),
+            "manifest_path": str(manifest_path),
+            "summary": manifest["summary"],
+            "created": created_rows,
+            "failed": failed_rows,
+            "skipped": skipped_rows,
+        }
+    )
+
+
+@app.get("/api/similar-batches")
+def similar_batches():
+    rows: List[Dict[str, Any]] = []
+    if not DB_GENERATED_CANDIDATES_DIR.is_dir():
+        return jsonify({"batches": rows})
+
+    for batch_id in sorted(_list_generated_batch_ids(), reverse=True):
+        candidate_dirs = _collect_batch_candidate_dirs(batch_id)
+        if not candidate_dirs:
+            continue
+        validation_summary = {"total": 0, "ok": 0, "failed": 0}
+        report_path = _batch_report_path(batch_id, "validation_report")
+        legacy_report_path = DB_GENERATED_CANDIDATES_DIR / batch_id / "validation_report.json"
+        if not report_path.is_file() and legacy_report_path.is_file():
+            report_path = legacy_report_path
+
+        if report_path.is_file():
+            try:
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+                if isinstance(report, dict):
+                    raw_summary = report.get("summary", {})
+                    if isinstance(raw_summary, dict):
+                        validation_summary = {
+                            "total": int(raw_summary.get("total", 0) or 0),
+                            "ok": int(raw_summary.get("ok", 0) or 0),
+                            "failed": int(raw_summary.get("failed", 0) or 0),
+                        }
+            except Exception:
+                validation_summary = {"total": 0, "ok": 0, "failed": 0}
+
+        latest_mtime = 0.0
+        for candidate_dir in candidate_dirs.values():
+            try:
+                latest_mtime = max(latest_mtime, candidate_dir.stat().st_mtime)
+            except Exception:
+                continue
+
+        rows.append(
+            {
+                "batch_id": batch_id,
+                "candidate_count": len(candidate_dirs),
+                "created_at": datetime.fromtimestamp(latest_mtime).isoformat(timespec="seconds") if latest_mtime else "",
+                "validation": validation_summary,
+            }
+        )
+    return jsonify({"batches": rows})
+
+
+@app.get("/api/similar-candidates")
+def similar_candidates():
+    batch_id = request.args.get("batch_id", "").strip()
+    candidate_dirs = _collect_batch_candidate_dirs(batch_id)
+    if not candidate_dirs:
+        return jsonify({"error": "batch-not-found"}), 404
+
+    validation_index: Dict[str, Dict[str, Any]] = {}
+    report_path = _batch_report_path(batch_id, "validation_report")
+    legacy_report_path = DB_GENERATED_CANDIDATES_DIR / batch_id / "validation_report.json"
+    if not report_path.is_file() and legacy_report_path.is_file():
+        report_path = legacy_report_path
+    if report_path.is_file():
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            for row in report.get("results", []) if isinstance(report, dict) else []:
+                candidate_id = str(row.get("candidate_id", "")).strip()
+                if candidate_id:
+                    validation_index[candidate_id] = row
+        except Exception:
+            validation_index = {}
+
+    rows: List[Dict[str, Any]] = []
+    for cdir in sorted(candidate_dirs.values(), key=lambda p: p.name):
+        candidate_id = cdir.name
+        try:
+            parsed = parse_problem_file(cdir / "problem.md")
+        except Exception as exc:  # pylint: disable=broad-except
+            rows.append(
+                {
+                    "candidate_id": candidate_id,
+                    "review_status": "parse-failed",
+                    "review_note": str(exc),
+                    "derived_from": "",
+                }
+            )
+            continue
+
+        front = dict(parsed.front_matter or {})
+        has_draft = any(
+            DRAFT_TOKEN in str(section or "")
+            for section in (parsed.q, parsed.choices, parsed.answer, parsed.solution)
+        )
+        review_note = str(front.get("review_note", "")).strip()
+        validation = validation_index.get(candidate_id, {})
+        rows.append(
+            {
+                "candidate_id": candidate_id,
+                "derived_from": str(front.get("derived_from", "")).strip(),
+                "similarity_type": str(front.get("similarity_type", "")).strip(),
+                "review_status": str(front.get("review_status", "pending") or "pending").strip().lower(),
+                "review_note": review_note,
+                "has_draft": has_draft,
+                "auto_failed": review_note.lower().startswith("auto-generation failed"),
+                "promoted_to": str(front.get("promoted_to", "")).strip(),
+                "generation_batch_id": str(front.get("generation_batch_id", "")).strip(),
+                "warnings": parsed.warnings,
+                "validation": {
+                    "ok": bool(validation.get("ok", False)) if validation else None,
+                    "error_count": len(validation.get("errors", [])) if isinstance(validation, dict) else 0,
+                    "warning_count": len(validation.get("warnings", [])) if isinstance(validation, dict) else 0,
+                    "similarity_ratio": validation.get("similarity_ratio") if isinstance(validation, dict) else None,
+                },
+            }
+        )
+    return jsonify({"batch_id": batch_id, "candidates": rows})
+
+
+@app.get("/api/similar-preview")
+def similar_preview():
+    batch_id = request.args.get("batch_id", "").strip()
+    candidate_id = request.args.get("candidate_id", "").strip()
+    folder = _resolve_similar_candidate_folder(batch_id, candidate_id)
+    if folder is None:
+        return jsonify({"error": "candidate-not-found"}), 404
+    problem_md = folder / "problem.md"
+    if not problem_md.is_file():
+        return jsonify({"error": "problem-file-not-found"}), 404
+
+    try:
+        parsed = parse_problem_file(problem_md)
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": "problem-parse-failed", "detail": str(exc)}), 500
+
+    preview = _build_similar_preview_payload(
+        batch_id=batch_id,
+        candidate_id=candidate_id,
+        q=parsed.q,
+        choices=parsed.choices,
+        answer=parsed.answer,
+        solution=parsed.solution,
+    )
+    preview["batch_id"] = batch_id
+    preview["candidate_id"] = candidate_id
+    preview["warnings"] = parsed.warnings
+    return jsonify(preview)
+
+
+@app.get("/api/similar-content")
+def similar_content():
+    batch_id = request.args.get("batch_id", "").strip()
+    candidate_id = request.args.get("candidate_id", "").strip()
+    folder = _resolve_similar_candidate_folder(batch_id, candidate_id)
+    if folder is None:
+        return jsonify({"error": "candidate-not-found"}), 404
+    problem_md = folder / "problem.md"
+    if not problem_md.is_file():
+        return jsonify({"error": "problem-file-not-found"}), 404
+
+    try:
+        parsed = parse_problem_file(problem_md)
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": "problem-parse-failed", "detail": str(exc)}), 500
+
+    front = dict(parsed.front_matter or {})
+    return jsonify(
+        {
+            "batch_id": batch_id,
+            "candidate_id": candidate_id,
+            **_serialize_problem_sections(parsed),
+            "review_status": str(front.get("review_status", "pending") or "pending").strip().lower(),
+            "review_note": str(front.get("review_note", "")).strip(),
+            "derived_from": str(front.get("derived_from", "")).strip(),
+            "warnings": parsed.warnings,
+        }
+    )
+
+
+@app.post("/api/similar-preview-render")
+def render_similar_preview_draft():
+    payload = request.get_json(silent=True) or {}
+    batch_id = str(payload.get("batch_id", "")).strip()
+    candidate_id = str(payload.get("candidate_id", "")).strip()
+    folder = _resolve_similar_candidate_folder(batch_id, candidate_id)
+    if folder is None:
+        return jsonify({"error": "candidate-not-found"}), 404
+
+    q = str(payload.get("q", "") or "")
+    choices = str(payload.get("choices", "") or "")
+    answer = str(payload.get("answer", "") or "")
+    solution = str(payload.get("solution", "") or "")
+
+    preview = _build_similar_preview_payload(
+        batch_id=batch_id,
+        candidate_id=candidate_id,
+        q=q,
+        choices=choices,
+        answer=answer,
+        solution=solution,
+    )
+    return jsonify({"ok": True, "batch_id": batch_id, "candidate_id": candidate_id, "preview": preview})
+
+
+@app.post("/api/similar-content")
+def update_similar_content():
+    payload = request.get_json(silent=True) or {}
+    batch_id = str(payload.get("batch_id", "")).strip()
+    candidate_id = str(payload.get("candidate_id", "")).strip()
+    folder = _resolve_similar_candidate_folder(batch_id, candidate_id)
+    if folder is None:
+        return jsonify({"error": "candidate-not-found"}), 404
+    problem_md = folder / "problem.md"
+    if not problem_md.is_file():
+        return jsonify({"error": "problem-file-not-found"}), 404
+
+    try:
+        parsed = parse_problem_file(problem_md)
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": "problem-parse-failed", "detail": str(exc)}), 500
+
+    front = dict(parsed.front_matter or {})
+    front["id"] = candidate_id
+    q = str(payload.get("q", "") or "")
+    choices = str(payload.get("choices", "") or "")
+    answer = str(payload.get("answer", "") or "")
+    solution = str(payload.get("solution", "") or "")
+
+    try:
+        _rewrite_problem_md_sections(
+            problem_md,
+            front,
+            q=q,
+            choices=choices,
+            answer=answer,
+            solution=solution,
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": "write-failed", "detail": str(exc)}), 500
+
+    preview = _build_similar_preview_payload(
+        batch_id=batch_id,
+        candidate_id=candidate_id,
+        q=q,
+        choices=choices,
+        answer=answer,
+        solution=solution,
+    )
+    return jsonify(
+        {
+            "ok": True,
+            "batch_id": batch_id,
+            "candidate_id": candidate_id,
+            "sections": {"q": q, "choices": choices, "answer": answer, "solution": solution},
+            "preview": preview,
+        }
+    )
+
+
+@app.post("/api/similar-review")
+def update_similar_review():
+    payload = request.get_json(silent=True) or {}
+    batch_id = str(payload.get("batch_id", "")).strip()
+    candidate_id = str(payload.get("candidate_id", "")).strip()
+    folder = _resolve_similar_candidate_folder(batch_id, candidate_id)
+    if folder is None:
+        return jsonify({"error": "candidate-not-found"}), 404
+    problem_md = folder / "problem.md"
+    if not problem_md.is_file():
+        return jsonify({"error": "problem-file-not-found"}), 404
+
+    status = str(payload.get("review_status", "")).strip().lower()
+    if status not in {"pending", "approved", "rejected"}:
+        return jsonify({"error": "invalid-payload", "detail": "review_status must be pending|approved|rejected"}), 400
+    note = str(payload.get("review_note", "") or "").strip()
+
+    try:
+        parsed = parse_problem_file(problem_md)
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": "problem-parse-failed", "detail": str(exc)}), 500
+
+    front = dict(parsed.front_matter or {})
+    front["id"] = candidate_id
+    front["review_status"] = status
+    front["review_note"] = note
+    front["reviewed_at"] = _now_iso()
+
+    try:
+        _rewrite_problem_md_sections(
+            problem_md,
+            front,
+            q=parsed.q,
+            choices=parsed.choices,
+            answer=parsed.answer,
+            solution=parsed.solution,
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": "write-failed", "detail": str(exc)}), 500
+
+    return jsonify({"ok": True, "batch_id": batch_id, "candidate_id": candidate_id, "review_status": status, "review_note": note})
+
+
+@app.post("/api/similar-delete")
+def delete_similar_candidate():
+    payload = request.get_json(silent=True) or {}
+    batch_id = str(payload.get("batch_id", "")).strip()
+    candidate_id = str(payload.get("candidate_id", "")).strip()
+    if not batch_id or not candidate_id:
+        return jsonify({"error": "invalid-payload", "detail": "batch_id and candidate_id are required"}), 400
+
+    folder = _resolve_similar_candidate_folder(batch_id, candidate_id)
+    if folder is None:
+        return jsonify({"error": "candidate-not-found"}), 404
+
+    try:
+        resolved_folder = folder.resolve()
+    except Exception:
+        resolved_folder = folder
+
+    try:
+        resolved_folder.relative_to(DB_GENERATED_CANDIDATES_DIR.resolve())
+    except ValueError:
+        return jsonify({"error": "candidate-not-found"}), 404
+
+    if not resolved_folder.is_dir():
+        return jsonify({"error": "candidate-not-found"}), 404
+
+    try:
+        shutil.rmtree(resolved_folder)
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": "delete-failed", "detail": str(exc)}), 500
+
+    legacy_batch_dir = DB_GENERATED_CANDIDATES_DIR / batch_id
+    if legacy_batch_dir.is_dir():
+        try:
+            if resolved_folder.parent.resolve() == legacy_batch_dir.resolve() and not any(legacy_batch_dir.iterdir()):
+                legacy_batch_dir.rmdir()
+        except Exception:
+            # Empty legacy batch folder cleanup is best-effort only.
+            pass
+
+    return jsonify({"ok": True, "batch_id": batch_id, "candidate_id": candidate_id, "deleted_path": str(resolved_folder)})
+
+
+@app.post("/api/similar-validate")
+def validate_similar_batch():
+    payload = request.get_json(silent=True) or {}
+    batch_id = str(payload.get("batch_id", "")).strip()
+    candidate_dirs = _collect_batch_candidate_dirs(batch_id)
+    if not candidate_dirs:
+        return jsonify({"error": "batch-not-found"}), 404
+
+    candidate_ids_raw = str(payload.get("candidate_ids", "") or "").strip()
+    selected_ids = set(_extract_ids(candidate_ids_raw))
+    max_similarity = payload.get("max_similarity", 0.92)
+    try:
+        max_similarity_value = float(max_similarity)
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid-payload", "detail": "max_similarity must be numeric"}), 400
+
+    results: List[Dict[str, Any]] = []
+    for cdir in sorted(candidate_dirs.values(), key=lambda p: p.name):
+        candidate_id = cdir.name
+        if selected_ids and candidate_id not in selected_ids:
+            continue
+
+        errors: List[str] = []
+        warnings: List[str] = []
+        similarity_ratio = 0.0
+        try:
+            parsed = parse_problem_file(cdir / "problem.md")
+        except Exception as exc:  # pylint: disable=broad-except
+            results.append(
+                {
+                    "candidate_id": candidate_id,
+                    "ok": False,
+                    "similarity_ratio": 1.0,
+                    "errors": [f"Parse failed: {exc}"],
+                    "warnings": [],
+                }
+            )
+            continue
+
+        front = dict(parsed.front_matter or {})
+        for section_name in ("q", "choices", "answer", "solution"):
+            value = str(getattr(parsed, section_name, "") or "").strip()
+            if not value:
+                errors.append(f"Section `{section_name}` is empty.")
+            if DRAFT_TOKEN in value:
+                errors.append(f"Section `{section_name}` still contains draft token.")
+            for issue in _latex_balance_issues(value):
+                warnings.append(f"{section_name}: {issue}")
+
+        if _objective_like_candidate(front, candidate_id):
+            count = _count_choice_lines(parsed.choices)
+            if count < 4:
+                errors.append(f"Objective question has too few option-like lines ({count}).")
+
+        derived_from = str(front.get("derived_from", "")).strip()
+        if derived_from:
+            source_md = DB_PROBLEMS_DIR / derived_from / "problem.md"
+            if source_md.is_file():
+                try:
+                    source = parse_problem_file(source_md)
+                    similarity_ratio = SequenceMatcher(
+                        None,
+                        _normalize_for_similarity(source.q),
+                        _normalize_for_similarity(parsed.q),
+                    ).ratio()
+                    if similarity_ratio > max_similarity_value:
+                        errors.append(
+                            f"Q similarity too high vs source ({similarity_ratio:.3f} > {max_similarity_value:.3f})."
+                        )
+                    elif similarity_ratio > max_similarity_value - 0.08:
+                        warnings.append(f"Q similarity near threshold ({similarity_ratio:.3f}).")
+                except Exception as exc:  # pylint: disable=broad-except
+                    warnings.append(f"Source parse failed for similarity check: {exc}")
+            else:
+                warnings.append(f"Source problem not found: {derived_from}")
+        else:
+            warnings.append("`derived_from` is missing.")
+
+        results.append(
+            {
+                "candidate_id": candidate_id,
+                "ok": len(errors) == 0,
+                "similarity_ratio": similarity_ratio,
+                "errors": errors,
+                "warnings": warnings,
+            }
+        )
+
+    failed = [row for row in results if not row.get("ok")]
+    report = {
+        "batch_id": batch_id,
+        "validated_at": _now_iso(),
+        "max_similarity": max_similarity_value,
+        "summary": {"total": len(results), "ok": len(results) - len(failed), "failed": len(failed)},
+        "results": results,
+    }
+    report_path = _batch_report_path(batch_id, "validation_report")
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return jsonify({"ok": True, "batch_id": batch_id, "summary": report["summary"], "results": results, "report_path": str(report_path)})
+
+
+@app.post("/api/similar-promote")
+def promote_similar_candidates():
+    if not SIMILAR_PROMOTION_ENABLED:
+        return jsonify(
+            {
+                "error": "policy-disabled",
+                "detail": "Promotion is disabled by policy. Official DB and generated candidates DB must remain separated.",
+            }
+        ), 403
+
+    payload = request.get_json(silent=True) or {}
+    batch_id = str(payload.get("batch_id", "")).strip()
+    candidate_dirs = _collect_batch_candidate_dirs(batch_id)
+    if not candidate_dirs:
+        return jsonify({"error": "batch-not-found"}), 404
+
+    selected_ids = set(_extract_ids(str(payload.get("candidate_ids", "") or "").strip()))
+    force = bool(payload.get("force"))
+
+    promoted: List[Dict[str, str]] = []
+    skipped: List[Dict[str, str]] = []
+
+    for cdir in sorted(candidate_dirs.values(), key=lambda p: p.name):
+        candidate_id = cdir.name
+        if selected_ids and candidate_id not in selected_ids:
+            continue
+        try:
+            parsed = parse_problem_file(cdir / "problem.md")
+        except Exception as exc:  # pylint: disable=broad-except
+            skipped.append({"candidate_id": candidate_id, "reason": f"parse-failed: {exc}"})
+            continue
+        front = dict(parsed.front_matter or {})
+        status = str(front.get("review_status", "")).strip().lower()
+        if status != "approved" and not force:
+            skipped.append({"candidate_id": candidate_id, "reason": f"review_status={status or 'none'}"})
+            continue
+        if any(DRAFT_TOKEN in str(getattr(parsed, sec, "") or "") for sec in ("q", "choices", "answer", "solution")):
+            skipped.append({"candidate_id": candidate_id, "reason": "contains-draft-token"})
+            continue
+
+        derived_from = str(front.get("derived_from", "")).strip()
+        source_match = PROBLEM_ID_RE.match(derived_from)
+        if not source_match:
+            skipped.append({"candidate_id": candidate_id, "reason": "invalid-derived_from"})
+            continue
+
+        prefix = derived_from.rsplit("-", 1)[0]
+        try:
+            new_id = _next_problem_id_for_prefix(prefix)
+        except ValueError as exc:
+            skipped.append({"candidate_id": candidate_id, "reason": str(exc)})
+            continue
+
+        target_dir = DB_PROBLEMS_DIR / new_id
+        if target_dir.exists():
+            skipped.append({"candidate_id": candidate_id, "reason": "target-already-exists"})
+            continue
+
+        try:
+            shutil.copytree(cdir, target_dir)
+            for extra_name in ("prompt.md", "source_snapshot.md", "validation_report.json"):
+                extra = target_dir / extra_name
+                if extra.exists():
+                    if extra.is_dir():
+                        shutil.rmtree(extra)
+                    else:
+                        extra.unlink()
+
+            promoted_front = dict(front)
+            promoted_front["id"] = new_id
+            promoted_front["promoted_from"] = candidate_id
+            promoted_front["promoted_at"] = _now_iso()
+            _rewrite_problem_md_sections(
+                target_dir / "problem.md",
+                promoted_front,
+                q=parsed.q,
+                choices=parsed.choices,
+                answer=parsed.answer,
+                solution=parsed.solution,
+            )
+
+            front["promoted_to"] = new_id
+            front["review_status"] = "promoted"
+            front["promoted_at"] = _now_iso()
+            _rewrite_problem_md_sections(
+                cdir / "problem.md",
+                front,
+                q=parsed.q,
+                choices=parsed.choices,
+                answer=parsed.answer,
+                solution=parsed.solution,
+            )
+            promoted.append({"candidate_id": candidate_id, "new_problem_id": new_id})
+        except Exception as exc:  # pylint: disable=broad-except
+            skipped.append({"candidate_id": candidate_id, "reason": f"promote-failed: {exc}"})
+
+    report = {
+        "batch_id": batch_id,
+        "promoted_at": _now_iso(),
+        "promoted": promoted,
+        "skipped": skipped,
+    }
+    report_path = _batch_report_path(batch_id, "promotion_report")
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return jsonify(
+        {
+            "ok": True,
+            "batch_id": batch_id,
+            "promoted": promoted,
+            "skipped": skipped,
+            "report_path": str(report_path),
+        }
+    )
 
 
 @app.get("/open-output")
@@ -1175,6 +3383,7 @@ def render_pdf():
     units = expand_unit_nodes_to_leaf_paths(unit_nodes)
     levels = _normalize_values(request.form.getlist("levels"))
     source_numbers = _normalize_values(request.form.getlist("source_numbers"))
+    selected_data_source = _normalize_data_source(request.form.get("data_source", "official"))
 
     selector_ids = _extract_ids(request.form.get("selector_ids", ""))
     manual_order_ids = _extract_ids(request.form.get("manual_order_ids", ""))
@@ -1184,7 +3393,7 @@ def render_pdf():
     legacy_sort_field = request.form.get("sort_field", "")
     sort_field_slots = _normalize_sort_field_slots(
         [
-            request.form.get("sort_field_1", legacy_sort_field or "default"),
+            request.form.get("sort_field_1", legacy_sort_field or "source"),
             request.form.get("sort_field_2", "none"),
             request.form.get("sort_field_3", "none"),
         ]
@@ -1201,7 +3410,10 @@ def render_pdf():
     append_answer_sheet = bool(request.form.get("answer_sheet"))
     append_solution_sheet = bool(request.form.get("solution_sheet"))
 
-    problem_meta = _scan_problem_meta()
+    problem_meta = _scan_problem_meta(
+        data_sources=[selected_data_source],
+    )
+    meta_by_id = {item["id"]: item for item in problem_meta}
     available_ids = {item["id"] for item in problem_meta}
     manual_selected_ids = [item for item in manual_selected_ids if item in available_ids]
     manual_selection_active = manual_selected_supplied and (primary_sort_field == "manual" or bool(manual_order_ids))
@@ -1233,7 +3445,11 @@ def render_pdf():
             selected_problem_ids.append(item["id"])
 
     if pattern:
-        selected_problem_ids = [item for item in selected_problem_ids if fnmatch.fnmatch(item, pattern)]
+        selected_problem_ids = [
+            item
+            for item in selected_problem_ids
+            if _matches_pattern_for_row(meta_by_id.get(item, {}), pattern)
+        ]
 
     if manual_selection_active:
         selected_manual_set = set(manual_selected_ids)
@@ -1272,6 +3488,7 @@ def render_pdf():
             "grade": _first_or(grades, defaults["grade"]),
             "semester": _first_or(semesters, defaults["semester"]),
             "exam": _first_or(exams, defaults["exam"]),
+            "data_source": selected_data_source,
             "schools": schools,
             "years": years,
             "grades": grades,
@@ -1296,6 +3513,58 @@ def render_pdf():
         }
         return redirect(url_for("index", **next_defaults))
 
+    selected_problem_dirs: List[str] = []
+    seen_problem_dirs = set()
+    missing_problem_dirs: List[str] = []
+    for problem_id in selected_problem_ids:
+        row = meta_by_id.get(problem_id)
+        folder_path = str(row.get("folder_path", "")).strip() if row else ""
+        if not folder_path:
+            missing_problem_dirs.append(problem_id)
+            continue
+        normalized_folder_path = str(Path(folder_path))
+        if normalized_folder_path in seen_problem_dirs:
+            continue
+        seen_problem_dirs.add(normalized_folder_path)
+        selected_problem_dirs.append(normalized_folder_path)
+
+    if missing_problem_dirs:
+        flash(f"문항 폴더를 찾을 수 없는 ID 제외: {', '.join(missing_problem_dirs[:10])}", "warning")
+
+    if not selected_problem_dirs:
+        flash("선택된 문항 폴더를 찾을 수 없습니다.", "warning")
+        next_defaults = {
+            "school": _first_or(schools, defaults["school"]),
+            "year": _first_or(years, defaults["year"]),
+            "grade": _first_or(grades, defaults["grade"]),
+            "semester": _first_or(semesters, defaults["semester"]),
+            "exam": _first_or(exams, defaults["exam"]),
+            "data_source": selected_data_source,
+            "schools": schools,
+            "years": years,
+            "grades": grades,
+            "semesters": semesters,
+            "exams": exams,
+            "unit_nodes": unit_nodes,
+            "levels": levels,
+            "source_numbers": source_numbers,
+            "selector_pattern": pattern,
+            "sort_field_1": sort_field_slots[0],
+            "sort_field_2": sort_field_slots[1],
+            "sort_field_3": sort_field_slots[2],
+            "sort_order": sort_order,
+            "manual_order_ids": " ".join(manual_order_ids),
+            "manual_selected_ids": " ".join(manual_selected_ids),
+            "question_count": str(question_count),
+            "show_source_info": "1" if show_source_info else "0",
+            "show_unit_info": "1" if show_unit_info else "0",
+            "teacher_view": "1" if teacher_view else "0",
+            "reset_question_number_by_school": "1" if reset_question_number_by_school else "0",
+            "exam_sheet": "1" if include_exam_sheet else "0",
+            "selector_ids": " ".join(selector_ids),
+        }
+        return redirect(url_for("index", **next_defaults))
+
     if not include_exam_sheet and not append_answer_sheet and not append_solution_sheet:
         flash("문제지/답안지/해설지 중 하나 이상 선택해 주세요.", "warning")
         next_defaults = {
@@ -1304,6 +3573,7 @@ def render_pdf():
             "grade": _first_or(grades, defaults["grade"]),
             "semester": _first_or(semesters, defaults["semester"]),
             "exam": _first_or(exams, defaults["exam"]),
+            "data_source": selected_data_source,
             "schools": schools,
             "years": years,
             "grades": grades,
@@ -1345,8 +3615,6 @@ def render_pdf():
     cmd = [
         sys.executable,
         "build_exam.py",
-        "--root",
-        "db/problems",
         "--out",
         str(out_path),
         "--paper",
@@ -1360,8 +3628,8 @@ def render_pdf():
             f"G{_first_or(grades, defaults['grade'])} S{_first_or(semesters, defaults['semester'])} "
             f"{_first_or(exams, defaults['exam'])}",
         ),
-        "--ids",
-        ",".join(selected_problem_ids),
+        "--dirs",
+        *selected_problem_dirs,
     ]
 
     if show_source_info:
@@ -1422,6 +3690,7 @@ def render_pdf():
         "grade": _first_or(grades, defaults["grade"]),
         "semester": _first_or(semesters, defaults["semester"]),
         "exam": _first_or(exams, defaults["exam"]),
+        "data_source": selected_data_source,
         "schools": schools,
         "years": years,
         "grades": grades,

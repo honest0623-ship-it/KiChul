@@ -1,0 +1,27 @@
+{
+  "batch_id": "sim_20260310_120048",
+  "created_at": "2026-03-10T12:04:37",
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "similarity_type": "parameter_change",
+  "variants_per_seed": 1,
+  "seed_ids": [
+    "HN-2025-G1-S1-MID-007"
+  ],
+  "summary": {
+    "requested_seed_count": 1,
+    "created": 1,
+    "failed": 0,
+    "skipped": 0
+  },
+  "created": [
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-007-sim002",
+      "seed_id": "HN-2025-G1-S1-MID-007",
+      "objective": true,
+      "status": "generated"
+    }
+  ],
+  "failed": [],
+  "skipped": []
+}

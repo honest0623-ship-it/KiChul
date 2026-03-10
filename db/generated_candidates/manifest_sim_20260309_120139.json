@@ -1,0 +1,41 @@
+{
+  "batch_id": "sim_20260309_120139",
+  "created_at": "2026-03-09T12:05:11",
+  "provider": "openai",
+  "model": "gpt-5.2-pro",
+  "similarity_type": "parameter_change",
+  "variants_per_seed": 1,
+  "seed_ids": [
+    "HN-2024-G1-S1-MID-007",
+    "HN-2024-G1-S1-MID-015",
+    "HN-2024-G1-S1-MID-103"
+  ],
+  "summary": {
+    "requested_seed_count": 3,
+    "created": 3,
+    "failed": 0,
+    "skipped": 0
+  },
+  "created": [
+    {
+      "candidate_id": "HN-2024-G1-S1-MID-007-sim004",
+      "seed_id": "HN-2024-G1-S1-MID-007",
+      "objective": true,
+      "status": "generated"
+    },
+    {
+      "candidate_id": "HN-2024-G1-S1-MID-015-sim004",
+      "seed_id": "HN-2024-G1-S1-MID-015",
+      "objective": true,
+      "status": "generated"
+    },
+    {
+      "candidate_id": "HN-2024-G1-S1-MID-103-sim001",
+      "seed_id": "HN-2024-G1-S1-MID-103",
+      "objective": false,
+      "status": "generated"
+    }
+  ],
+  "failed": [],
+  "skipped": []
+}
