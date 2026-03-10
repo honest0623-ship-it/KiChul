@@ -7,4 +7,4 @@
 
 ## Deprecated Shortcuts
 
-- `DB작업시작해줘` 단축 명령과 `scripts/db_workflow_cli.py` 기반 워크플로는 제거됨.
+- DB pipeline 단축 명령과 관련 워크플로 안내는 제거됨.

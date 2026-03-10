@@ -29,6 +29,7 @@ MATH_SEGMENT_RE = re.compile(
     re.DOTALL,
 )
 CURRICULUM_SUFFIX_RE = re.compile(r"\s*\(2022개정\)\s*")
+SIMILAR_CANDIDATE_SUFFIX_RE = re.compile(r"-sim\d+$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -181,9 +182,11 @@ SOLUTION_SHEET_TEMPLATE = """
       border-radius: 4px;
       padding: 1mm 1.2mm;
       margin: 0 0 1mm 0;
-      break-inside: avoid;
-      page-break-inside: avoid;
-      -webkit-column-break-inside: avoid;
+      break-inside: auto;
+      page-break-inside: auto;
+      -webkit-column-break-inside: auto;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
     }
     .head {
       display: flex;
@@ -192,6 +195,9 @@ SOLUTION_SHEET_TEMPLATE = """
       margin: 0 0 0.55mm 0;
       border-bottom: 0.5pt solid #e5e7eb;
       padding-bottom: 0.45mm;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      -webkit-column-break-inside: avoid;
     }
     .num {
       font-weight: 700;
@@ -213,14 +219,26 @@ SOLUTION_SHEET_TEMPLATE = """
       overflow-wrap: anywhere;
       word-break: break-word;
     }
+    .answer {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      -webkit-column-break-inside: avoid;
+    }
     .answer p,
     .solution p {
       margin: 0;
       line-height: 1.18;
+      orphans: 2;
+      widows: 2;
     }
     .answer p + p,
     .solution p + p {
       margin-top: 0.12mm;
+    }
+    .solution li {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      -webkit-column-break-inside: avoid;
     }
     .answer .MathJax_Display,
     .solution .MathJax_Display,
@@ -230,6 +248,9 @@ SOLUTION_SHEET_TEMPLATE = """
       margin-bottom: 0.15mm !important;
       max-width: 100%;
       overflow: hidden;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      -webkit-column-break-inside: avoid;
     }
     .answer mjx-container[display="true"] svg,
     .solution mjx-container[display="true"] svg {
@@ -242,6 +263,9 @@ SOLUTION_SHEET_TEMPLATE = """
       height: auto;
       display: block;
       margin: 0.35mm auto;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      -webkit-column-break-inside: avoid;
     }
   </style>
   {{ mathjax_bootstrap | safe }}
@@ -407,11 +431,17 @@ def _build_source_info(problem: ParsedProblem) -> str:
     exam = str(front.get("exam") or from_id.get("exam") or "").strip().upper()
     subject = str(front.get("subject") or from_id.get("subject") or "").strip()
     source_label = _extract_source_question_label(front, str(from_id.get("number", "")))
+    generation_batch_id = str(front.get("generation_batch_id") or "").strip()
+    is_similar_candidate = bool(generation_batch_id) or bool(SIMILAR_CANDIDATE_SUFFIX_RE.search(problem.display_id))
 
     unit_path = _extract_unit_path(front).replace(" > ", ">")
 
     parts: List[str] = []
-    if school:
+    if is_similar_candidate and school:
+        parts.append(f"유사 {school}")
+    elif is_similar_candidate:
+        parts.append("유사")
+    elif school:
         parts.append(school)
     if year:
         parts.append(year)
@@ -457,8 +487,12 @@ def _build_source_header_meta(problem: ParsedProblem) -> Dict[str, str]:
     exam = str(front.get("exam") or from_id.get("exam") or "").strip().upper()
     subject = str(front.get("subject") or from_id.get("subject") or "").strip()
     source_label = _extract_source_question_label(front, str(from_id.get("number", "")))
+    generation_batch_id = str(front.get("generation_batch_id") or "").strip()
+    is_similar_candidate = bool(generation_batch_id) or bool(SIMILAR_CANDIDATE_SUFFIX_RE.search(problem.display_id))
 
     exam_parts: List[str] = []
+    if is_similar_candidate:
+        exam_parts.append("유사")
     if school:
         exam_parts.append(school)
     if year:

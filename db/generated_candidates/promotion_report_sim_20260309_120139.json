@@ -1,0 +1,15 @@
+{
+  "batch_id": "sim_20260309_120139",
+  "promoted_at": "2026-03-09T12:21:54",
+  "promoted": [
+    {
+      "candidate_id": "HN-2024-G1-S1-MID-007-sim004",
+      "new_problem_id": "HN-2024-G1-S1-MID-107"
+    },
+    {
+      "candidate_id": "HN-2024-G1-S1-MID-015-sim004",
+      "new_problem_id": "HN-2024-G1-S1-MID-108"
+    }
+  ],
+  "skipped": []
+}

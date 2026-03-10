@@ -4,7 +4,7 @@ school: HN
 year: 2021
 grade: 1
 semester: 1
-exam: Final
+exam: FINAL
 subject: COM1
 type: 객관식
 source_question_no: 1
@@ -12,10 +12,10 @@ source_question_kind: objective
 source_question_label: '1'
 difficulty: 3
 level: 3
-unit: 공통수학1(2022개정)>1. 다항식>1-3. 인수분해
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-3. 여러 가지 방정식
 unit_l1: 공통수학1(2022개정)
-unit_l2: 1. 다항식
-unit_l3: 1-3. 인수분해
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-3. 여러 가지 방정식
 source: user_upload_2026-03-10
 tags:
 - 객관식
@@ -30,7 +30,6 @@ assets:
 방정식 \(x^4-2x^2+3x-2=0\)을 풀면?
 
 ## Choices
-
 ① \(x=-2,\ x=1,\ x=\dfrac{1\pm\sqrt{3}i}{2}\)
 ② \(x=2,\ x=-1,\ x=\dfrac{1\pm\sqrt{5}}{2}\)
 ③ \(x=-1\text{(중근)},\ x=3\text{(중근)}\)

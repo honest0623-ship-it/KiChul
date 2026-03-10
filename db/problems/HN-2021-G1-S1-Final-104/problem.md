@@ -4,18 +4,18 @@ school: HN
 year: 2021
 grade: 1
 semester: 1
-exam: Final
+exam: FINAL
 subject: COM1
 type: 서답형
 source_question_no: 4
 source_question_kind: subjective
-source_question_label: '서답4번'
+source_question_label: 서답4번
 difficulty: 4
 level: 4
-unit: 공통수학1(2022개정)>1. 다항식>1-1. 다항식의 연산
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-4. 여러 가지 부등식
 unit_l1: 공통수학1(2022개정)
-unit_l2: 1. 다항식
-unit_l3: 1-1. 다항식의 연산
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-4. 여러 가지 부등식
 source: user_upload_2026-03-10
 tags:
 - 서답형

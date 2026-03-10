@@ -12,10 +12,10 @@ source_question_kind: objective
 source_question_label: '5'
 difficulty: 3
 level: 3
-unit: 공통수학1(2022개정)>1. 다항식>1-2. 나머지정리
+unit: 공통수학1(2022개정)>1. 다항식>1-1. 다항식의 연산
 unit_l1: 공통수학1(2022개정)
 unit_l2: 1. 다항식
-unit_l3: 1-2. 나머지정리
+unit_l3: 1-1. 다항식의 연산
 source: user_upload_2026-03-06
 tags:
 - 수동생성
@@ -38,6 +38,7 @@ assets:
 ③ 몫 \(x^2+1\), 나머지 \(2\)
 ④ 몫 \(2x^2+2\), 나머지 \(1\)
 ⑤ 몫 \(2x^2+2\), 나머지 \(2\)
+
 ## Answer
 ③
 

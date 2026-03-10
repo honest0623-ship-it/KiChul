@@ -1,0 +1,134 @@
+{
+  "batch_id": "sim_20260309_182621",
+  "validated_at": "2026-03-10T00:01:36",
+  "max_similarity": 0.92,
+  "summary": {
+    "total": 14,
+    "ok": 8,
+    "failed": 6
+  },
+  "results": [
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-003-sim002",
+      "ok": true,
+      "similarity_ratio": 0.6620689655172414,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-004-sim002",
+      "ok": true,
+      "similarity_ratio": 0.8440366972477065,
+      "errors": [],
+      "warnings": [
+        "Q similarity near threshold (0.844)."
+      ]
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-007-sim002",
+      "ok": true,
+      "similarity_ratio": 0.46943765281173594,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-008-sim002",
+      "ok": true,
+      "similarity_ratio": 0.8,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-009-sim002",
+      "ok": true,
+      "similarity_ratio": 0.8625,
+      "errors": [],
+      "warnings": [
+        "Q similarity near threshold (0.863)."
+      ]
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-010-sim002",
+      "ok": true,
+      "similarity_ratio": 0.7207207207207207,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-011-sim002",
+      "ok": false,
+      "similarity_ratio": 0.08823529411764706,
+      "errors": [
+        "Section `q` still contains draft token.",
+        "Section `answer` still contains draft token.",
+        "Section `solution` still contains draft token."
+      ],
+      "warnings": []
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-012-sim002",
+      "ok": false,
+      "similarity_ratio": 0.9411764705882353,
+      "errors": [
+        "Q similarity too high vs source (0.941 > 0.920)."
+      ],
+      "warnings": []
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-013-sim002",
+      "ok": false,
+      "similarity_ratio": 0.9295774647887324,
+      "errors": [
+        "Q similarity too high vs source (0.930 > 0.920)."
+      ],
+      "warnings": []
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-017-sim002",
+      "ok": true,
+      "similarity_ratio": 0.8102564102564103,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-018-sim002",
+      "ok": true,
+      "similarity_ratio": 0.7686703096539163,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-102-sim002",
+      "ok": false,
+      "similarity_ratio": 0.0784313725490196,
+      "errors": [
+        "Section `q` still contains draft token.",
+        "Section `choices` is empty.",
+        "Section `answer` still contains draft token.",
+        "Section `solution` still contains draft token."
+      ],
+      "warnings": []
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-103-sim002",
+      "ok": false,
+      "similarity_ratio": 0.11374407582938388,
+      "errors": [
+        "Section `q` still contains draft token.",
+        "Section `choices` is empty.",
+        "Section `answer` still contains draft token.",
+        "Section `solution` still contains draft token."
+      ],
+      "warnings": []
+    },
+    {
+      "candidate_id": "HN-2025-G1-S1-MID-106-sim002",
+      "ok": false,
+      "similarity_ratio": 0.8027210884353742,
+      "errors": [
+        "Section `choices` is empty."
+      ],
+      "warnings": []
+    }
+  ]
+}

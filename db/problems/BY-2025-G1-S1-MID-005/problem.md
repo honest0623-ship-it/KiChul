@@ -23,6 +23,7 @@ assets:
 - assets/original/
 - assets/original/005.png
 ---
+
 ## Q
 이차방정식 $2x^2-4x+5=0$의 두 근을 $\alpha,\beta$라 할 때, $\alpha+\beta$와 $\alpha\beta$를 두 근으로 하고 $x^2$의 계수가 $1$인 이차방정식은?
 

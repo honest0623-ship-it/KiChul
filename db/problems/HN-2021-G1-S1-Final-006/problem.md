@@ -4,7 +4,7 @@ school: HN
 year: 2021
 grade: 1
 semester: 1
-exam: Final
+exam: FINAL
 subject: COM1
 type: 객관식
 source_question_no: 6
@@ -12,10 +12,10 @@ source_question_kind: objective
 source_question_label: '6'
 difficulty: 3
 level: 3
-unit: 공통수학1(2022개정)>1. 다항식>1-1. 다항식의 연산
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-4. 여러 가지 부등식
 unit_l1: 공통수학1(2022개정)
-unit_l2: 1. 다항식
-unit_l3: 1-1. 다항식의 연산
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-4. 여러 가지 부등식
 source: user_upload_2026-03-10
 tags:
 - 객관식
@@ -30,7 +30,6 @@ assets:
 어느 타일 공장에서 직사각형 모양의 타일 규격을 \(A\)와 \(B\)의 두 가지로 정하려고 한다. \(A\)와 \(B\)의 가로의 길이는 같고, \(A\)의 세로의 길이는 가로의 길이보다 \(20\text{ cm}\)만큼 길고, \(B\)의 세로의 길이는 가로의 길이보다 \(30\text{ cm}\)만큼 짧다고 한다. \(A\)의 넓이를 \(4800\text{ cm}^2\) 이상, \(B\)의 넓이를 \(4000\text{ cm}^2\) 이하가 되도록 할 때, 타일의 가로의 길이의 범위를 구하면?
 
 ## Choices
-
 ① \(60<x<70\)
 ② \(60\le x<70\)
 ③ \(60\le x\le70\)

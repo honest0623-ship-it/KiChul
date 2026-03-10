@@ -4,18 +4,18 @@ school: HN
 year: 2021
 grade: 1
 semester: 1
-exam: Final
-subject: COM1
+exam: FINAL
+subject: COM2
 type: 객관식
 source_question_no: 11
 source_question_kind: objective
 source_question_label: '11'
 difficulty: 3
 level: 3
-unit: 공통수학1(2022개정)>1. 다항식>1-1. 다항식의 연산
-unit_l1: 공통수학1(2022개정)
-unit_l2: 1. 다항식
-unit_l3: 1-1. 다항식의 연산
+unit: 공통수학2(2022개정)>1. 도형의 방정식>1-2. 직선의 방정식
+unit_l1: 공통수학2(2022개정)
+unit_l2: 1. 도형의 방정식
+unit_l3: 1-2. 직선의 방정식
 source: user_upload_2026-03-10
 tags:
 - 객관식
@@ -36,7 +36,6 @@ assets:
 <img src="assets/scan.png" alt="문항 삽화" style="width:60% !important; max-width:60% !important; height:auto;" />
 
 ## Choices
-
 ① (가) \((1,m)\), (나) \((1,m')\), (다) \(1-m^2\), (라) \((m+m')^2\), (마) \(1\)
 ② (가) \((m,1)\), (나) \((1,m')\), (다) \(m^2-1\), (라) \((m-m')^2\), (마) \(1\)
 ③ (가) \((2,m)\), (나) \((m',1)\), (다) \(2+m\), (라) \((m+m')^2\), (마) \(1\)

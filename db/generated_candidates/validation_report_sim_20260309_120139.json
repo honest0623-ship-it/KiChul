@@ -1,0 +1,21 @@
+{
+  "batch_id": "sim_20260309_120139",
+  "validated_at": "2026-03-09T12:23:39",
+  "max_similarity": 0.92,
+  "summary": {
+    "total": 1,
+    "ok": 0,
+    "failed": 1
+  },
+  "results": [
+    {
+      "candidate_id": "HN-2024-G1-S1-MID-103-sim001",
+      "ok": false,
+      "similarity_ratio": 0.8224852071005917,
+      "errors": [
+        "Section `choices` is empty."
+      ],
+      "warnings": []
+    }
+  ]
+}

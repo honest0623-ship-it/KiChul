@@ -19,10 +19,21 @@ def _parse_ids(ids_arg: str) -> List[str]:
     return [item.strip() for item in ids_arg.split(",") if item.strip()]
 
 
-def _collect_problem_dirs(root: Path, ids_arg: str | None, pattern: str | None) -> List[Path]:
+def _collect_problem_dirs(
+    root: Path,
+    ids_arg: str | None,
+    pattern: str | None,
+    dirs_arg: List[str] | None,
+) -> List[Path]:
     selected: List[Path] = []
 
-    if ids_arg:
+    if dirs_arg:
+        for raw_dir in dirs_arg:
+            token = str(raw_dir or "").strip()
+            if not token:
+                continue
+            selected.append(Path(token))
+    elif ids_arg:
         for problem_id in _parse_ids(ids_arg):
             selected.append(root / problem_id)
     elif pattern:
@@ -55,6 +66,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     selector.add_argument(
         "--pattern",
         help='Glob pattern for selecting folders. Example: "JEHS-2025-G1-S1-MID-*"',
+    )
+    selector.add_argument(
+        "--dirs",
+        nargs="+",
+        help="Space-separated explicit problem folder paths.",
     )
 
     parser.add_argument(
@@ -129,6 +145,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Show inline answer under each problem in exam PDF (교사용 출력).",
     )
     parser.add_argument(
+        "--reset-question-number-by-school",
+        action="store_true",
+        help="Reset displayed question number when school changes in selected order (학교별문항번호리셋).",
+    )
+    parser.add_argument(
         "--skip-exam",
         action="store_true",
         help="Skip main exam PDF rendering and generate only selected sheets.",
@@ -183,6 +204,7 @@ def _build_layout(
     show_source_info: bool,
     show_unit_info: bool,
     show_teacher_answer: bool,
+    reset_question_number_by_school: bool,
 ) -> ExamLayout:
     paper_key = paper.upper()
     if columns < 1:
@@ -225,6 +247,7 @@ def _build_layout(
         show_source_info=show_source_info,
         show_unit_info=show_unit_info,
         show_teacher_answer=show_teacher_answer,
+        reset_question_number_by_school=reset_question_number_by_school,
     )
 
 
@@ -248,6 +271,7 @@ def main() -> int:
             show_source_info=args.show_source_info,
             show_unit_info=args.show_unit_info,
             show_teacher_answer=args.teacher_view,
+            reset_question_number_by_school=args.reset_question_number_by_school,
         )
     except ValueError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
@@ -255,11 +279,17 @@ def main() -> int:
 
     warnings: List[str] = []
 
-    if not root.exists() or not root.is_dir():
+    using_explicit_dirs = bool(args.dirs)
+    if not using_explicit_dirs and (not root.exists() or not root.is_dir()):
         print(f"[ERROR] Root directory not found: {root}", file=sys.stderr)
         return 1
 
-    problem_dirs = _collect_problem_dirs(root=root, ids_arg=args.ids, pattern=args.pattern)
+    problem_dirs = _collect_problem_dirs(
+        root=root,
+        ids_arg=args.ids,
+        pattern=args.pattern,
+        dirs_arg=args.dirs,
+    )
     if not problem_dirs:
         print("[ERROR] No problem folders matched the selector.", file=sys.stderr)
         return 1
@@ -337,6 +367,7 @@ def main() -> int:
                 out_pdf=answer_target,
                 mathjax_bundle=mathjax_bundle,
                 warnings=warnings,
+                reset_question_number_by_school=layout.reset_question_number_by_school,
             )
             if args.append_sheets_to_out:
                 appended_paths.append(answer_target)
@@ -359,6 +390,7 @@ def main() -> int:
                 out_pdf=solution_target,
                 mathjax_bundle=mathjax_bundle,
                 warnings=warnings,
+                reset_question_number_by_school=layout.reset_question_number_by_school,
             )
             if args.append_sheets_to_out:
                 appended_paths.append(solution_target)
