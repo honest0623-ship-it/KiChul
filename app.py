@@ -123,6 +123,8 @@ AI_GENERATE_OPENAI_TIMEOUT_SEC = 45
 SIMILAR_GENERATION_MAX_ATTEMPTS = 3
 SIMILAR_GENERATION_MAX_SEEDS_PER_REQUEST = 6
 SIMILAR_PROMOTION_ENABLED = False
+FRONT_MATTER_CACHE_LOCK = Lock()
+FRONT_MATTER_CACHE: Dict[str, tuple[int, int, Dict[str, Any]]] = {}
 
 DEFAULTS = {
     "school": "HN",
@@ -567,14 +569,50 @@ def _scan_flat_similar_candidate_dirs() -> List[Path]:
     return rows
 
 
-def _read_front_matter_quiet(problem_md: Path) -> Dict[str, Any]:
+def _read_front_matter_cached(problem_md: Path) -> Dict[str, Any]:
+    if not problem_md.is_file():
+        return {}
+    try:
+        stat = problem_md.stat()
+    except OSError:
+        return {}
+
+    cache_key = str(problem_md.resolve())
+    cache_sig = (int(stat.st_mtime_ns), int(stat.st_size))
+    with FRONT_MATTER_CACHE_LOCK:
+        cached = FRONT_MATTER_CACHE.get(cache_key)
+        if cached is not None and cached[0] == cache_sig[0] and cached[1] == cache_sig[1]:
+            return dict(cached[2])
+
+    front: Dict[str, Any] = {}
     try:
         parsed = parse_problem_file(problem_md)
         if isinstance(parsed.front_matter, dict):
-            return dict(parsed.front_matter)
+            front = dict(parsed.front_matter)
     except Exception:
-        return {}
-    return {}
+        front = {}
+
+    with FRONT_MATTER_CACHE_LOCK:
+        FRONT_MATTER_CACHE[cache_key] = (cache_sig[0], cache_sig[1], dict(front))
+    return front
+
+
+def _invalidate_front_matter_cache_for_file(problem_md: Path) -> None:
+    cache_key = str(problem_md.resolve())
+    with FRONT_MATTER_CACHE_LOCK:
+        FRONT_MATTER_CACHE.pop(cache_key, None)
+
+
+def _invalidate_front_matter_cache_for_folder(folder: Path) -> None:
+    prefix = str(folder.resolve())
+    with FRONT_MATTER_CACHE_LOCK:
+        stale_keys = [key for key in FRONT_MATTER_CACHE if key.startswith(prefix)]
+        for key in stale_keys:
+            FRONT_MATTER_CACHE.pop(key, None)
+
+
+def _read_front_matter_quiet(problem_md: Path) -> Dict[str, Any]:
+    return _read_front_matter_cached(problem_md)
 
 
 def _extract_generation_batch_id(candidate_dir: Path) -> str:
@@ -615,6 +653,33 @@ def _batch_report_path(batch_id: str, report_kind: str) -> Path:
     safe_batch_id = _sanitize_batch_id(batch_id) or "batch"
     safe_kind = _sanitize_batch_id(report_kind) or "report"
     return DB_GENERATED_CANDIDATES_DIR / f"{safe_kind}_{safe_batch_id}.json"
+
+
+def _batch_ids_from_report_files() -> set[str]:
+    rows: set[str] = set()
+    if not DB_GENERATED_CANDIDATES_DIR.is_dir():
+        return rows
+
+    prefixes = ("manifest_", "validation_report_", "promotion_report_")
+    for json_path in DB_GENERATED_CANDIDATES_DIR.glob("*.json"):
+        name = json_path.name
+        if not name.endswith(".json"):
+            continue
+        stem = name[:-5]
+        for prefix in prefixes:
+            if not stem.startswith(prefix):
+                continue
+            token = stem[len(prefix) :].strip()
+            if token and SIMILAR_BATCH_ID_RE.match(token):
+                rows.add(token)
+            break
+    return rows
+
+
+def _existing_batch_ids() -> set[str]:
+    rows = set(_list_generated_batch_ids())
+    rows.update(_batch_ids_from_report_files())
+    return rows
 
 
 def _mask_secret(secret: str) -> str:
@@ -726,9 +791,10 @@ def _unique_batch_id(requested: str) -> str:
     base = _sanitize_batch_id(requested) if requested else datetime.now().strftime("sim_%Y%m%d_%H%M%S")
     if not base:
         base = datetime.now().strftime("sim_%Y%m%d_%H%M%S")
+    used_batch_ids = _existing_batch_ids()
     candidate = base
     index = 2
-    while (DB_GENERATED_CANDIDATES_DIR / candidate).exists():
+    while candidate in used_batch_ids:
         candidate = f"{base}_{index:03d}"
         index += 1
     return candidate
@@ -1442,15 +1508,8 @@ def _scan_problem_meta(
             matched = PROBLEM_ID_RE.match(folder.name)
             if not matched:
                 continue
-            front_matter: Dict[str, Any] = {}
             problem_md = folder / "problem.md"
-            if problem_md.exists():
-                try:
-                    parsed = parse_problem_file(problem_md)
-                    if isinstance(parsed.front_matter, dict):
-                        front_matter = parsed.front_matter
-                except Exception:
-                    front_matter = {}
+            front_matter = _read_front_matter_quiet(problem_md)
 
             source_no = _extract_source_no_from_front_matter(front_matter)
             if not source_no:
@@ -1507,15 +1566,8 @@ def _scan_problem_meta(
         for batch_id in selected_batches:
             candidate_dirs = _collect_batch_candidate_dirs(batch_id)
             for folder in candidate_dirs.values():
-                front_matter: Dict[str, Any] = {}
                 problem_md = folder / "problem.md"
-                if problem_md.exists():
-                    try:
-                        parsed = parse_problem_file(problem_md)
-                        if isinstance(parsed.front_matter, dict):
-                            front_matter = parsed.front_matter
-                    except Exception:
-                        front_matter = {}
+                front_matter = _read_front_matter_quiet(problem_md)
 
                 derived_from = str(front_matter.get("derived_from", "")).strip()
                 matched = PROBLEM_ID_RE.match(derived_from)
@@ -1826,6 +1878,7 @@ def _rewrite_problem_md_sections(
         f"## Solution\n{str(solution or '').strip()}\n"
     )
     path.write_text(f"---\n{front_text}\n---\n\n{body}", encoding="utf-8")
+    _invalidate_front_matter_cache_for_file(path)
 
 
 def _id_groups_for_problem_meta(problem_id: str, front: Dict[str, Any]) -> Dict[str, str]:
@@ -1914,16 +1967,94 @@ def _serialize_problem_meta(problem_id: str, front: Dict[str, Any]) -> Dict[str,
 
 
 def _refresh_problem_meta_row(problem_id: str) -> Dict[str, Any] | None:
-    parsed_generated = _parse_generated_problem_ui_id(problem_id)
+    token = str(problem_id or "").strip()
+    if not token:
+        return None
+
+    parsed_generated = _parse_generated_problem_ui_id(token)
     if parsed_generated is None:
-        rows = _scan_problem_meta(data_sources=["official"], generated_batches=None)
-    else:
-        batch_id, _ = parsed_generated
-        rows = _scan_problem_meta(data_sources=["generated"], generated_batches=[batch_id])
-    for row in rows:
-        if str(row.get("id", "")).strip() == problem_id:
-            return row
-    return None
+        folder = _resolve_problem_folder(token)
+        if folder is None:
+            return None
+        matched = PROBLEM_ID_RE.match(token)
+        if not matched:
+            return None
+        problem_md = folder / "problem.md"
+        front = _read_front_matter_quiet(problem_md)
+        source_no = _extract_source_no_from_front_matter(front) or _fallback_source_no(matched.group("number"), front)
+        source_kind = _extract_source_kind(front, matched.group("number"))
+        source_label = _build_source_label(source_no, source_kind)
+        unit = _extract_unit_from_front_matter(front)
+        unit_l1_hint = unit.split(">", 1)[0] if unit else ""
+        subject = _normalize_subject_code(
+            front.get("subject"),
+            unit_l1=unit_l1_hint,
+            fallback=matched.group("subject") or "",
+        )
+        return {
+            "id": token,
+            "problem_id": token,
+            "display_id": token,
+            "root_kind": "official",
+            "batch_id": "",
+            "folder_path": str(folder),
+            "school": str(front.get("school") or matched.group("school") or "").strip().upper(),
+            "year": str(front.get("year") or matched.group("year") or "").strip(),
+            "grade": str(front.get("grade") or matched.group("grade") or "").strip(),
+            "semester": str(front.get("semester") or matched.group("semester") or "").strip(),
+            "exam": str(front.get("exam") or matched.group("exam") or "").strip().upper(),
+            "subject": subject,
+            "number": matched.group("number"),
+            "source_no": source_no,
+            "source_kind": source_kind,
+            "source_label": source_label,
+            "unit": unit,
+            "level": _extract_level_from_front_matter(front),
+        }
+
+    batch_id, candidate_id = parsed_generated
+    folder = _resolve_similar_candidate_folder(batch_id, candidate_id)
+    if folder is None:
+        return None
+    problem_md = folder / "problem.md"
+    front = _read_front_matter_quiet(problem_md)
+
+    derived_from = str(front.get("derived_from", "")).strip()
+    matched = PROBLEM_ID_RE.match(derived_from)
+    folder_number = matched.group("number") if matched else "001"
+    source_no = _extract_source_no_from_front_matter(front)
+    if not source_no and matched:
+        source_no = _fallback_source_no(folder_number, front)
+    source_kind = _extract_source_kind(front, folder_number)
+    source_label = _build_source_label(source_no, source_kind)
+    unit = _extract_unit_from_front_matter(front)
+    unit_l1_hint = unit.split(">", 1)[0] if unit else ""
+    subject = _normalize_subject_code(
+        front.get("subject"),
+        unit_l1=unit_l1_hint,
+        fallback=(matched.group("subject") if matched else "") or "",
+    )
+
+    return {
+        "id": token,
+        "problem_id": candidate_id,
+        "display_id": candidate_id,
+        "root_kind": "generated",
+        "batch_id": batch_id,
+        "folder_path": str(folder),
+        "school": str(front.get("school") or (matched.group("school") if matched else "") or "").strip().upper(),
+        "year": str(front.get("year") or (matched.group("year") if matched else "") or "").strip(),
+        "grade": str(front.get("grade") or (matched.group("grade") if matched else "") or "").strip(),
+        "semester": str(front.get("semester") or (matched.group("semester") if matched else "") or "").strip(),
+        "exam": str(front.get("exam") or (matched.group("exam") if matched else "") or "").strip().upper(),
+        "subject": subject,
+        "number": folder_number if matched else "",
+        "source_no": source_no,
+        "source_kind": source_kind,
+        "source_label": source_label,
+        "unit": unit,
+        "level": _extract_level_from_front_matter(front),
+    }
 
 
 def _serialize_problem_sections(parsed) -> Dict[str, str]:
@@ -2480,6 +2611,7 @@ def delete_problem():
         return jsonify({"error": "problem-not-found"}), 404
 
     try:
+        _invalidate_front_matter_cache_for_folder(folder)
         shutil.rmtree(folder)
     except Exception as exc:  # pylint: disable=broad-except
         return jsonify({"error": "delete-failed", "detail": str(exc)}), 500
@@ -3149,6 +3281,7 @@ def delete_similar_candidate():
         return jsonify({"error": "candidate-not-found"}), 404
 
     try:
+        _invalidate_front_matter_cache_for_folder(resolved_folder)
         shutil.rmtree(resolved_folder)
     except Exception as exc:  # pylint: disable=broad-except
         return jsonify({"error": "delete-failed", "detail": str(exc)}), 500

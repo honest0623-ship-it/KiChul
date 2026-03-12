@@ -39,7 +39,8 @@ python app.py
 
 1. Load metadata from both DBs:
    - official DB: `db/problems/*/problem.md`
-   - generated candidates DB: `db/generated_candidates/<batch>/*/problem.md`
+   - generated candidates DB (flat): `db/generated_candidates/<candidate_id>/problem.md` with `generation_batch_id=<batch_id>`
+   - generated candidates DB (legacy nested, read-only compatibility): `db/generated_candidates/<batch>/*/problem.md`
 2. Apply filter options (school/year/grade/semester/exam/unit/level/source no).
 3. Filter by chosen source DB (`official` or `generated`) and build selected problem ID list.
 4. Run `build_exam.py` as subprocess with explicit selected problem folder paths (`--dirs`).
@@ -142,7 +143,7 @@ Build by explicit directories (mixed roots allowed):
 python build_exam.py `
   --dirs `
   db/problems/HN-2025-G1-S1-MID-006 `
-  db/generated_candidates/sim_20260309_092328/HN-2025-G1-S1-MID-006__SIM01 `
+  db/generated_candidates/HN-2025-G1-S1-MID-006-sim001 `
   --out output/mixed_exam.pdf
 ```
 
