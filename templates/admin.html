@@ -136,6 +136,11 @@
       display: grid;
       gap: 6px;
     }
+    .check-panel.auto-height {
+      min-height: 0;
+      max-height: none;
+      overflow: visible;
+    }
     .check-item {
       display: flex;
       align-items: center;
@@ -212,6 +217,8 @@
       --manual-workbench-height: 1200px;
       --manual-grid-gap: 8px;
       --manual-resizer-height: 12px;
+      --manual-col-resizer-width: 12px;
+      --manual-list-pane-width: 3fr;
       --manual-top-row-height-base: calc(700px - 44px);
       --manual-preview-shrink-ratio: 0.25;
       --manual-preview-shrink-size: calc(var(--manual-top-row-height-base) * var(--manual-preview-shrink-ratio));
@@ -355,16 +362,52 @@
     .manual-order-main {
       margin-top: 8px;
       display: grid;
-      grid-template-columns: minmax(0, 3fr) minmax(440px, 2fr);
+      grid-template-columns:
+        minmax(280px, var(--manual-list-pane-width))
+        var(--manual-col-resizer-width)
+        minmax(440px, 1fr);
       grid-template-rows: var(--manual-top-row-height) var(--manual-resizer-height) var(--manual-editor-row-height);
       grid-template-areas:
-        "list preview"
-        "list splitter"
-        "list editor";
+        "list vsplit preview"
+        "list vsplit splitter"
+        "list vsplit editor";
       gap: var(--manual-grid-gap);
       align-items: stretch;
       min-height: var(--manual-workbench-height);
       height: var(--manual-workbench-height);
+    }
+    .manual-pane-column-resizer {
+      grid-area: vsplit;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #f1f5f9;
+      min-width: var(--manual-col-resizer-width);
+      width: var(--manual-col-resizer-width);
+      cursor: col-resize;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      touch-action: none;
+    }
+    .manual-pane-column-resizer::before {
+      content: "";
+      width: 2px;
+      height: 56px;
+      border-radius: 2px;
+      background: #94a3b8;
+      box-shadow: -4px 0 0 #94a3b8, 4px 0 0 #94a3b8;
+    }
+    .manual-pane-column-resizer:hover {
+      background: #e2e8f0;
+    }
+    .manual-pane-column-resizer:focus-visible {
+      outline: 2px solid rgba(37, 99, 235, 0.5);
+      outline-offset: 1px;
+    }
+    .manual-pane-column-resizer.is-dragging {
+      border-color: #60a5fa;
+      background: #dbeafe;
     }
     .manual-preview-panel {
       border: 1px solid #cbd5e1;
@@ -462,9 +505,14 @@
       border-color: #60a5fa;
       background: #dbeafe;
     }
-    body.manual-pane-resizing,
-    body.manual-pane-resizing * {
+    body.manual-pane-resizing-row,
+    body.manual-pane-resizing-row * {
       cursor: row-resize !important;
+      user-select: none !important;
+    }
+    body.manual-pane-resizing-col,
+    body.manual-pane-resizing-col * {
+      cursor: col-resize !important;
       user-select: none !important;
     }
     .manual-editor-panel {
@@ -545,12 +593,12 @@
       background: #fff;
     }
     #manual-editor-q {
-      min-height: calc((94px + var(--manual-q-solution-grow)) * 0.9);
-      max-height: calc((286px + var(--manual-q-solution-grow)) * 0.9);
+      min-height: calc((116px + var(--manual-q-solution-grow)) * 0.9);
+      max-height: calc((308px + var(--manual-q-solution-grow)) * 0.9);
     }
     #manual-editor-solution {
-      min-height: calc(94px + var(--manual-q-solution-grow));
-      max-height: calc(286px + var(--manual-q-solution-grow));
+      min-height: calc(116px + var(--manual-q-solution-grow));
+      max-height: calc(308px + var(--manual-q-solution-grow));
     }
     #manual-editor-answer {
       min-height: 30px;
@@ -924,6 +972,9 @@
       .manual-pane-resizer {
         display: none;
       }
+      .manual-pane-column-resizer {
+        display: none;
+      }
       .manual-order-list {
         min-height: 260px;
         max-height: 260px;
@@ -1026,7 +1077,7 @@
           </div>
           <div>
             <label>School (복수선택)</label>
-            <div id="school-panel" class="check-panel">
+            <div id="school-panel" class="check-panel auto-height">
               {% if pdf_options.schools %}
                 {% for value in pdf_options.schools %}
                   {% set item_id = "render_school_" ~ loop.index %}
@@ -1043,7 +1094,7 @@
           </div>
           <div>
             <label>Year (복수선택)</label>
-            <div id="year-panel" class="check-panel">
+            <div id="year-panel" class="check-panel auto-height">
               {% if pdf_options.years %}
                 {% for value in pdf_options.years %}
                   {% set item_id = "render_year_" ~ loop.index %}
@@ -1254,8 +1305,21 @@
               <option value="desc" {% if pdf_selected.sort_order == "desc" %}selected{% endif %}>내림차순</option>
             </select>
           </div>
-          <div><label for="paper">Paper</label><select id="paper" name="paper"><option value="A4" selected>A4</option><option value="B4">B4</option></select></div>
-          <div><label for="columns">Columns</label><input id="columns" type="number" name="columns" value="2" /></div>
+          <div>
+            <label for="paper">Paper</label>
+            <select id="paper" name="paper">
+              <option value="A4" {% if pdf_selected.paper == "A4" %}selected{% endif %}>A4</option>
+              <option value="B4" {% if pdf_selected.paper == "B4" %}selected{% endif %}>B4</option>
+            </select>
+          </div>
+          <div>
+            <label for="problems_per_page">페이지당 문항수</label>
+            <select id="problems_per_page" name="problems_per_page">
+              <option value="4" {% if pdf_selected.problems_per_page == 4 %}selected{% endif %}>4문항 (2x2)</option>
+              <option value="6" {% if pdf_selected.problems_per_page == 6 %}selected{% endif %}>6문항 (2x3)</option>
+              <option value="8" {% if pdf_selected.problems_per_page == 8 %}selected{% endif %}>8문항 (2x4)</option>
+            </select>
+          </div>
           <div><label for="question_count">출제 문항수 (0=전체)</label><input id="question_count" type="number" name="question_count" min="0" value="{{ pdf_selected.question_count }}" /></div>
           <div><label for="title">Title</label><input id="title" type="text" name="title" value="{{ pdf_selected.title }}" /></div>
           <div><label for="out_name">Output PDF Name</label><input id="out_name" type="text" name="out_name" value="exam_from_web.pdf" /></div>
@@ -1270,6 +1334,15 @@
             </div>
             <div class="manual-order-main">
               <ul id="manual-order-list" class="manual-order-list"></ul>
+              <div
+                class="manual-pane-column-resizer"
+                id="manual-pane-column-resizer"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="문항 목록과 편집 영역 가로 크기 조절"
+                tabindex="0"
+                title="좌우로 드래그해서 목록/편집영역 너비 조절"
+              ></div>
               <aside class="manual-preview-panel manual-preview-panel-saved">
                 <div class="manual-preview-title" id="manual-preview-title">미리보기</div>
                 <div class="manual-preview-subtitle" id="manual-preview-subtitle">문항을 선택하면 저장된 problem.md 미리보기가 표시됩니다.</div>
@@ -1322,13 +1395,15 @@
         <div class="inline">
           <label><input type="checkbox" name="show_source_info" {% if pdf_selected.show_source_info %}checked{% endif %} /> 문항별 기출정보 표시</label>
           <label><input type="checkbox" name="show_unit_info" {% if pdf_selected.show_unit_info %}checked{% endif %} /> 문항별 단원정보 표시</label>
+          <label><input type="checkbox" name="show_outer_border" {% if pdf_selected.show_outer_border %}checked{% endif %} /> 전체 외곽 테두리선</label>
+          <label><input type="checkbox" name="show_inner_dividers" {% if pdf_selected.show_inner_dividers %}checked{% endif %} /> 내부 구분선</label>
         </div>
 
         <div class="inline">
           <label><input type="checkbox" name="exam_sheet" {% if pdf_selected.exam_sheet %}checked{% endif %} /> 문제지 PDF 생성</label>
-          <label><input type="checkbox" name="solution_sheet" checked /> 해설지 PDF 생성(정답+해설)</label>
-          <label><input type="checkbox" name="answer_sheet" /> 답안지 PDF 생성</label>
-          <label><input type="checkbox" name="teacher_view" {% if pdf_selected.teacher_view %}checked{% endif %} /> 교사용 출력(문항 아래 정답 표시)</label>
+          <label><input type="checkbox" name="solution_sheet" {% if pdf_selected.solution_sheet %}checked{% endif %} /> 해설지 PDF 생성(정답+해설)</label>
+          <label><input type="checkbox" name="answer_sheet" {% if pdf_selected.answer_sheet %}checked{% endif %} /> 답안지 PDF 생성</label>
+          <label><input type="checkbox" name="teacher_view" {% if pdf_selected.teacher_view %}checked{% endif %} /> 교사용 출력</label>
           <label><input type="checkbox" name="reset_question_number_by_school" {% if pdf_selected.reset_question_number_by_school %}checked{% endif %} /> 학교별문항번호리셋(학교 변경 시 1번부터)</label>
         </div>
 
@@ -1731,6 +1806,7 @@
       const manualOrderWrap = document.querySelector(".manual-order-wrap");
       const manualOrderMain = manualOrderWrap ? manualOrderWrap.querySelector(".manual-order-main") : null;
       const manualPaneResizer = document.getElementById("manual-pane-resizer");
+      const manualPaneColumnResizer = document.getElementById("manual-pane-column-resizer");
       const manualPreviewTitle = document.getElementById("manual-preview-title");
       const manualPreviewSubtitle = document.getElementById("manual-preview-subtitle");
       const manualPreviewContent = document.getElementById("manual-preview-content");
@@ -1793,8 +1869,11 @@
       };
 
       const MANUAL_PANE_SPLIT_STORAGE_KEY = "manual-pane-preview-height";
+      const MANUAL_PANE_COLUMN_SPLIT_STORAGE_KEY = "manual-pane-list-width";
       const MANUAL_PANE_MIN_PREVIEW = 180;
       const MANUAL_PANE_MIN_EDITOR = 280;
+      const MANUAL_PANE_MIN_LIST = 280;
+      const MANUAL_PANE_MIN_RIGHT = 440;
       const DESKTOP_MANUAL_LAYOUT_QUERY = window.matchMedia("(min-width: 1051px)");
 
       const parsePx = (raw, fallback = 0) => {
@@ -1870,6 +1949,68 @@
         }
       };
 
+      const getManualPaneColumnMetrics = () => {
+        if (!manualOrderWrap || !manualOrderMain) return null;
+        const wrapStyle = window.getComputedStyle(manualOrderWrap);
+        const mainStyle = window.getComputedStyle(manualOrderMain);
+        const totalWidth = manualOrderMain.clientWidth || manualOrderWrap.clientWidth || 1200;
+        const columnGap =
+          parsePx(mainStyle.columnGap, NaN) ||
+          parsePx(mainStyle.gap, NaN) ||
+          parsePx(wrapStyle.getPropertyValue("--manual-grid-gap"), 8);
+        const columnResizerWidth = parsePx(wrapStyle.getPropertyValue("--manual-col-resizer-width"), 12);
+        const availableWidth = Math.max(560, totalWidth - columnGap * 2 - columnResizerWidth);
+        const minListWidth = Math.max(180, Math.min(MANUAL_PANE_MIN_LIST, availableWidth - 180));
+        const maxListWidth = Math.max(minListWidth, availableWidth - MANUAL_PANE_MIN_RIGHT);
+        return {
+          minListWidth,
+          maxListWidth,
+        };
+      };
+
+      const getCurrentManualListWidth = (fallback = 0) => {
+        if (!manualOrderWrap) return fallback;
+        const fromStyle = parsePx(
+          window.getComputedStyle(manualOrderWrap).getPropertyValue("--manual-list-pane-width"),
+          Number.NaN
+        );
+        if (Number.isFinite(fromStyle) && fromStyle > 0) return fromStyle;
+        const measured = manualOrderList ? manualOrderList.getBoundingClientRect().width : 0;
+        if (Number.isFinite(measured) && measured > 0) return measured;
+        return fallback;
+      };
+
+      const applyManualPaneColumnSplit = (nextListWidth) => {
+        if (!manualOrderWrap) return null;
+        const metrics = getManualPaneColumnMetrics();
+        if (!metrics) return null;
+        let listWidth = Number(nextListWidth);
+        if (!Number.isFinite(listWidth)) {
+          listWidth = getCurrentManualListWidth((metrics.minListWidth + metrics.maxListWidth) / 2);
+        }
+        listWidth = Math.min(metrics.maxListWidth, Math.max(metrics.minListWidth, listWidth));
+        manualOrderWrap.style.setProperty("--manual-list-pane-width", `${listWidth}px`);
+        return listWidth;
+      };
+
+      const saveManualPaneColumnSplit = (listWidth) => {
+        if (!Number.isFinite(listWidth)) return;
+        try {
+          window.localStorage.setItem(MANUAL_PANE_COLUMN_SPLIT_STORAGE_KEY, String(Math.round(listWidth)));
+        } catch (_) {}
+      };
+
+      const loadManualPaneColumnSplit = () => {
+        try {
+          const raw = window.localStorage.getItem(MANUAL_PANE_COLUMN_SPLIT_STORAGE_KEY);
+          if (!raw) return null;
+          const parsed = Number.parseFloat(raw);
+          return Number.isFinite(parsed) ? parsed : null;
+        } catch (_) {
+          return null;
+        }
+      };
+
       const initManualPaneResizer = () => {
         if (!manualPaneResizer || !manualOrderWrap || !manualOrderMain) return;
 
@@ -1890,7 +2031,7 @@
         const clearDraggingState = () => {
           dragging = false;
           manualPaneResizer.classList.remove("is-dragging");
-          document.body.classList.remove("manual-pane-resizing");
+          document.body.classList.remove("manual-pane-resizing-row");
           window.removeEventListener("pointermove", onPointerMove);
           window.removeEventListener("pointerup", onPointerUp);
           window.removeEventListener("pointercancel", onPointerUp);
@@ -1919,7 +2060,7 @@
           startY = event.clientY;
           dragging = true;
           manualPaneResizer.classList.add("is-dragging");
-          document.body.classList.add("manual-pane-resizing");
+          document.body.classList.add("manual-pane-resizing-row");
           window.addEventListener("pointermove", onPointerMove);
           window.addEventListener("pointerup", onPointerUp);
           window.addEventListener("pointercancel", onPointerUp);
@@ -1952,7 +2093,93 @@
         activateDesktopSplit();
       };
 
+      const initManualPaneColumnResizer = () => {
+        if (!manualPaneColumnResizer || !manualOrderWrap || !manualOrderMain) return;
+
+        const activateDesktopColumnSplit = () => {
+          if (!DESKTOP_MANUAL_LAYOUT_QUERY.matches) return;
+          const stored = loadManualPaneColumnSplit();
+          const metrics = getManualPaneColumnMetrics();
+          const defaultWidth = getCurrentManualListWidth(
+            metrics ? (metrics.minListWidth + metrics.maxListWidth) / 2 : 480
+          );
+          const applied = applyManualPaneColumnSplit(stored ?? defaultWidth);
+          if (applied !== null) {
+            saveManualPaneColumnSplit(applied);
+          }
+        };
+
+        let dragging = false;
+        let startX = 0;
+        let startListWidth = 0;
+
+        const clearDraggingState = () => {
+          dragging = false;
+          manualPaneColumnResizer.classList.remove("is-dragging");
+          document.body.classList.remove("manual-pane-resizing-col");
+          window.removeEventListener("pointermove", onPointerMove);
+          window.removeEventListener("pointerup", onPointerUp);
+          window.removeEventListener("pointercancel", onPointerUp);
+        };
+
+        const onPointerMove = (event) => {
+          if (!dragging) return;
+          const deltaX = event.clientX - startX;
+          const applied = applyManualPaneColumnSplit(startListWidth + deltaX);
+          if (applied !== null) {
+            saveManualPaneColumnSplit(applied);
+          }
+        };
+
+        const onPointerUp = () => {
+          if (!dragging) return;
+          clearDraggingState();
+        };
+
+        manualPaneColumnResizer.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          if (!DESKTOP_MANUAL_LAYOUT_QUERY.matches) return;
+          event.preventDefault();
+          const current = applyManualPaneColumnSplit(getCurrentManualListWidth(480));
+          startListWidth = Number.isFinite(current) ? current : 480;
+          startX = event.clientX;
+          dragging = true;
+          manualPaneColumnResizer.classList.add("is-dragging");
+          document.body.classList.add("manual-pane-resizing-col");
+          window.addEventListener("pointermove", onPointerMove);
+          window.addEventListener("pointerup", onPointerUp);
+          window.addEventListener("pointercancel", onPointerUp);
+        });
+
+        manualPaneColumnResizer.addEventListener("keydown", (event) => {
+          if (!DESKTOP_MANUAL_LAYOUT_QUERY.matches) return;
+          const step = event.shiftKey ? 64 : 32;
+          let delta = 0;
+          if (event.key === "ArrowLeft") delta = -step;
+          if (event.key === "ArrowRight") delta = step;
+          if (!delta) return;
+          event.preventDefault();
+          const current = getCurrentManualListWidth(480);
+          const applied = applyManualPaneColumnSplit(current + delta);
+          if (applied !== null) {
+            saveManualPaneColumnSplit(applied);
+          }
+        });
+
+        window.addEventListener("resize", () => {
+          if (!DESKTOP_MANUAL_LAYOUT_QUERY.matches) return;
+          const current = getCurrentManualListWidth(480);
+          const applied = applyManualPaneColumnSplit(current);
+          if (applied !== null) {
+            saveManualPaneColumnSplit(applied);
+          }
+        });
+
+        activateDesktopColumnSplit();
+      };
+
       initManualPaneResizer();
+      initManualPaneColumnResizer();
 
       const uniqueIds = (ids) => {
         const rows = [];
@@ -3009,9 +3236,6 @@
         loadFilteredOrderBtn.addEventListener("click", () => {
           const ids = collectFilteredProblemIds();
           renderManualOrderList(ids, { checkedIds: ids, defaultChecked: true });
-          if (sortFieldInput1) sortFieldInput1.value = "manual";
-          if (sortFieldInput2) sortFieldInput2.value = "none";
-          if (sortFieldInput3) sortFieldInput3.value = "none";
           refreshSortControls();
         });
       }

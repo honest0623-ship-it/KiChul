@@ -23,6 +23,7 @@ assets:
 - assets/original/013_2-1. 삼각함수.png
 - assets/scan.png
 ---
+
 ## Q
 다음 그림과 같이 중심각의 크기가 \(\dfrac{\pi}{6}\)인 부채꼴 \(OAB\)가 있다. 선분 \(OA\) 위의 점 \(P\)에 대하여 선분 \(PA\)를 지름으로 하고 선분 \(OB\)에 접하는 반원을 \(C\)라 하자. 부채꼴 \(OAB\)의 넓이를 \(S_1\), 반원 \(C\)의 넓이를 \(S_2\)라 할 때,
 \[
@@ -31,11 +32,9 @@ S_1-S_2=16\pi
 이다. 이때 부채꼴 \(OAB\)의 호 \(AB\)의 길이는?
 
 
-<img src="assets/scan.png" alt="문항 도형" style="width:100% !important; max-width:100% !important; height:auto;" />
+<img src="assets/scan.png" alt="문항 도형" style="width:70% !important; max-width:70% !important; height:auto;" />
 
 ## Choices
-
-
 ① \(2\pi\)
 ② \(4\pi\)
 ③ \(6\pi\)

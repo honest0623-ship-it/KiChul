@@ -43,11 +43,15 @@ class ExamLayout:
     margin_left_mm: int
     column_gap_mm: int
     columns: int
+    rows_per_column: int
+    problems_per_page: int
     font_size_pt: float
     title: str
     show_meta: bool
     show_source_info: bool
     show_unit_info: bool
+    show_outer_border: bool
+    show_inner_dividers: bool
     show_teacher_answer: bool
     reset_question_number_by_school: bool
 
@@ -731,7 +735,11 @@ def render_exam_pdf(
         margin_left_mm=layout.margin_left_mm,
         column_gap_mm=layout.column_gap_mm,
         columns=layout.columns,
+        rows_per_column=layout.rows_per_column,
+        problems_per_page=layout.problems_per_page,
         font_size_pt=layout.font_size_pt,
+        show_outer_border=layout.show_outer_border,
+        show_inner_dividers=layout.show_inner_dividers,
         exam_summary=exam_summary,
         problems=items,
     )

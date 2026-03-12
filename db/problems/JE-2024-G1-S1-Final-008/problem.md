@@ -30,26 +30,11 @@ assets:
 - assets/original/JE.2024.G1.S1.Final.COM1.pdf
 - assets/original/JE.2024.G1.S1.Final.COM1.008.png
 ---
-## Q
-다음 그림과 같이 이차함수
-\[
-y=x^2+2n
-\]
-의 그래프와 직선
-\[
-y=mx+n
-\]
-의 교점의 $x$좌표가 각각
-\[
--1,\ 3
-\]
-일 때, 실수 $m$, $n$의 합
-\[
-m+n
-\]
-의 값은?
 
-<img src="assets/scan.png" alt="문항 삽화" style="width:60% !important; max-width:60% !important; height:auto;" />
+## Q
+다음 그림과 같이 이차함수 $y=x^2+2n$의 그래프와 직선 $y=mx+n$의 교점의 $x$좌표가 각각 $-1,3$일 때, 실수 $m$, $n$의 합 $m+n$의 값은?
+
+<img src="assets/scan.png" alt="문항 삽화" style="width:45% !important; max-width:45% !important; height:auto;" />
 
 ## Choices
 ① $-2$

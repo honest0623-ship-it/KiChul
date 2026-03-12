@@ -8,31 +8,30 @@ exam: MID
 type: 객관식
 source_question_no: 17
 source_question_kind: objective
-source_question_label: "17"
+source_question_label: '17'
 difficulty: 4
 level: 4
-unit: "대수(2022개정)>2. 삼각함수>2-1. 삼각함수"
-unit_l1: "대수(2022개정)"
-unit_l2: "2. 삼각함수"
-unit_l3: "2-1. 삼각함수"
-source: "user_upload_2026-03-03"
+unit: 대수(2022개정)>2. 삼각함수>2-1. 삼각함수
+unit_l1: 대수(2022개정)
+unit_l2: 2. 삼각함수
+unit_l3: 2-1. 삼각함수
+source: user_upload_2026-03-03
 tags:
-  - 자동입력
-  - 객관식
-  - 출제번호-17
-  - OCR
-  - AI
+- 자동입력
+- 객관식
+- 출제번호-17
+- OCR
+- AI
 assets:
-  - assets/scan.png
-  # Raw source image archive.
-  - assets/original/
-  - assets/original/017_2-1. 삼각함수.png
+- assets/scan.png
+- assets/original/
+- assets/original/017_2-1. 삼각함수.png
 ---
 
 ## Q
 다음 그림과 같이 반지름의 길이가 9인 원에 서로 외접하는 크기가 같은 6개의 원이 내접하고 있다. 어두운 부분의 넓이가 $S=p\sqrt{3}-q\pi$ ($p, q$는 정수)일 때, $\frac{p}{q}$의 값은?
 
-<img src="assets/scan.png" style="width: 80%; max-width: 80%;">
+<img src="assets/scan.png" style="width: 60%; max-width: 60%;">
 
 ## Choices
 ① 3

@@ -24,6 +24,7 @@ def _collect_problem_dirs(
     ids_arg: str | None,
     pattern: str | None,
     dirs_arg: List[str] | None,
+    dirs_file_arg: str | None,
 ) -> List[Path]:
     selected: List[Path] = []
 
@@ -31,6 +32,13 @@ def _collect_problem_dirs(
         for raw_dir in dirs_arg:
             token = str(raw_dir or "").strip()
             if not token:
+                continue
+            selected.append(Path(token))
+    elif dirs_file_arg:
+        dirs_file = Path(dirs_file_arg)
+        for raw_line in dirs_file.read_text(encoding="utf-8").splitlines():
+            token = raw_line.lstrip("\ufeff").strip()
+            if not token or token.startswith("#"):
                 continue
             selected.append(Path(token))
     elif ids_arg:
@@ -71,6 +79,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--dirs",
         nargs="+",
         help="Space-separated explicit problem folder paths.",
+    )
+    selector.add_argument(
+        "--dirs-file",
+        help="UTF-8 text file containing one explicit problem folder path per line.",
     )
 
     parser.add_argument(
@@ -114,6 +126,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Number of columns for exam body. Default: 2",
     )
     parser.add_argument(
+        "--problems-per-page",
+        type=int,
+        default=8,
+        choices=[4, 6, 8],
+        help="Target problem slots per page. Default: 8",
+    )
+    parser.add_argument(
         "--font-size",
         type=float,
         default=10.0,
@@ -121,8 +140,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--title",
-        default="Exam",
-        help="Document title shown in PDF header. Default: Exam",
+        default="내신 기출",
+        help="Document title shown in PDF header. Default: 내신 기출",
     )
     parser.add_argument(
         "--show-meta",
@@ -138,6 +157,16 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--show-unit-info",
         action="store_true",
         help="Show per-problem unit info line.",
+    )
+    parser.add_argument(
+        "--outer-border-off",
+        action="store_true",
+        help="Hide the outer page border for the exam sheet.",
+    )
+    parser.add_argument(
+        "--inner-dividers-off",
+        action="store_true",
+        help="Hide inner divider lines inside the exam sheet.",
     )
     parser.add_argument(
         "--teacher-view",
@@ -198,19 +227,27 @@ def _merge_pdfs(out_pdf: Path, append_paths: List[Path], include_out_pdf: bool =
 def _build_layout(
     paper: str,
     columns: int,
+    problems_per_page: int,
     font_size: float,
     title: str,
     show_meta: bool,
     show_source_info: bool,
     show_unit_info: bool,
+    show_outer_border: bool,
+    show_inner_dividers: bool,
     show_teacher_answer: bool,
     reset_question_number_by_school: bool,
 ) -> ExamLayout:
     paper_key = paper.upper()
     if columns < 1:
         raise ValueError("--columns must be >= 1")
+    if problems_per_page < 1:
+        raise ValueError("--problems-per-page must be >= 1")
+    if problems_per_page % columns != 0:
+        raise ValueError("--problems-per-page must be divisible by --columns")
     if font_size <= 0:
         raise ValueError("--font-size must be > 0")
+    rows_per_column = problems_per_page // columns
 
     if paper_key == "A4":
         page_width_mm = 210
@@ -241,11 +278,15 @@ def _build_layout(
         margin_left_mm=margin_left_mm,
         column_gap_mm=column_gap_mm,
         columns=columns,
+        rows_per_column=rows_per_column,
+        problems_per_page=problems_per_page,
         font_size_pt=font_size,
         title=title,
         show_meta=show_meta,
         show_source_info=show_source_info,
         show_unit_info=show_unit_info,
+        show_outer_border=show_outer_border,
+        show_inner_dividers=show_inner_dividers,
         show_teacher_answer=show_teacher_answer,
         reset_question_number_by_school=reset_question_number_by_school,
     )
@@ -265,11 +306,14 @@ def main() -> int:
         layout = _build_layout(
             paper=args.paper,
             columns=args.columns,
+            problems_per_page=args.problems_per_page,
             font_size=args.font_size,
             title=args.title,
             show_meta=args.show_meta,
             show_source_info=args.show_source_info,
             show_unit_info=args.show_unit_info,
+            show_outer_border=not args.outer_border_off,
+            show_inner_dividers=not args.inner_dividers_off,
             show_teacher_answer=args.teacher_view,
             reset_question_number_by_school=args.reset_question_number_by_school,
         )
@@ -279,7 +323,7 @@ def main() -> int:
 
     warnings: List[str] = []
 
-    using_explicit_dirs = bool(args.dirs)
+    using_explicit_dirs = bool(args.dirs or args.dirs_file)
     if not using_explicit_dirs and (not root.exists() or not root.is_dir()):
         print(f"[ERROR] Root directory not found: {root}", file=sys.stderr)
         return 1
@@ -289,6 +333,7 @@ def main() -> int:
         ids_arg=args.ids,
         pattern=args.pattern,
         dirs_arg=args.dirs,
+        dirs_file_arg=args.dirs_file,
     )
     if not problem_dirs:
         print("[ERROR] No problem folders matched the selector.", file=sys.stderr)

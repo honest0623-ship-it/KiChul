@@ -9,7 +9,7 @@ subject: COM1
 type: subjective
 source_question_no: 2
 source_question_kind: subjective
-source_question_label: '서2'
+source_question_label: 서2
 difficulty: 4
 level: 4
 unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-2. 이차방정식과 이차함수
@@ -29,10 +29,11 @@ assets:
 - assets/original/
 - assets/original/SY.2022.G1.S1.MID.COM1.pdf
 ---
+
 ## Q
 오른쪽 그림과 같이 한 변의 길이가 $8$인 정사각형 $ABCD$에 내접하는 정사각형 $EFGH$가 있다. 이때 점 $E, F, G, H$는 각각 변 $AB, BC, CD, DA$ 위에 있다. 정사각형 $EFGH$의 넓이의 최솟값을 구하시오.
 
-<img src="assets/scan.png" alt="문항 원본" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="문항 원본" style="width:40% !important; max-width:40% !important; height:auto;" />
 
 ## Choices
 

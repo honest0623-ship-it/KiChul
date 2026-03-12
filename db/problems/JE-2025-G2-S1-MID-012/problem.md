@@ -25,10 +25,11 @@ assets:
 - assets/original/012_2-1. 삼각함수.png
 - assets/original/012_2-1. 삼각함수_scan.png
 ---
+
 ## Q
 아래 그림과 같은 중심각의 크기가 $\dfrac{\pi}{4}$이고 반지름이 $8$인 부채꼴에서 빗금 친 부분의 넓이를 구하면?
 
-<img src="assets/scan.png" style="width: 100%; max-width: 100%;">
+<img src="assets/scan.png" style="width: 65%; max-width: 65%;">
 
 ## Choices
 ① $8\pi-16\sqrt{2}$  

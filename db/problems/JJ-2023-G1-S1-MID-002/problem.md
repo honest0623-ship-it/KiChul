@@ -31,7 +31,7 @@ assets:
 ## Q
 오른쪽 그림과 같이 세 모서리의 길이가 각각 \(a,\ b,\ c\)인 직육면체의 겉넓이가 \(52\)이고, 대각선의 길이가 \(\sqrt{29}\)일 때, 모든 모서리의 길이의 합은?
 
-<img src="assets/scan.png" alt="JJ2023-Q2-figure" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="JJ2023-Q2-figure" style="width:40% !important; max-width:40% !important; height:auto;" />
 
 ## Choices
 ① 9

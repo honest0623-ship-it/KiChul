@@ -29,10 +29,11 @@ assets:
 - assets/original/
 - assets/original/SY.2022.G1.S1.MID.COM1.pdf
 ---
+
 ## Q
 오른쪽 그림과 같이 직사각형 $ABCD$의 두 꼭짓점 $A, B$는 $x$축 위에 있고, 두 꼭짓점 $C, D$는 이차함수 $y=-x^2+8x$의 그래프 위에 있다. 직사각형 $ABCD$의 둘레의 길이의 최댓값을 구하면?
 
-<img src="assets/scan.png" alt="문항 원본" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="문항 원본" style="width:50% !important; max-width:50% !important; height:auto;" />
 
 ## Choices
 ① $34$

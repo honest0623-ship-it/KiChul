@@ -27,7 +27,7 @@ assets:
 ## Q
 다음 그림과 같이 동경 $OP$가 나타내는 각의 크기 $\theta$에 대하여 $\sin\theta$ 값을 구하면? (단, $O$는 원점이다.)
 
-<img src="assets/scan.png" style="width: 60%; max-width: 60%;">
+<img src="assets/scan.png" style="width: 75%; max-width: 75%;">
 
 ## Choices
 ① $-\dfrac{\sqrt3}{2}$

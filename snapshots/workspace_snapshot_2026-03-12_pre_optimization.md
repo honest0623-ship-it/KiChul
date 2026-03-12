@@ -1,0 +1,165 @@
+﻿# Workspace Snapshot (Pre-Optimization)
+
+- Timestamp: 2026-03-12 12:38:09 +09:00
+- Branch: layout-change
+- Base HEAD: f8dc2bf
+- Tracked files: 2775
+- Problem markdown count: 1244
+- Generated candidate markdown count: 45
+
+## git status --short --branch
+
+```
+## layout-change...origin/layout-change
+ M app.py
+ M build_exam.py
+ M db/problems/BY-2023-G1-S1-MID-013/problem.md
+ M db/problems/BY-2023-G1-S1-MID-018/problem.md
+ M db/problems/BY-2024-G2-S1-MID-ALG-006/problem.md
+ M db/problems/BY-2025-G2-S1-MID-003/problem.md
+ M db/problems/BY-2025-G2-S1-MID-016/problem.md
+ M db/problems/BY-2025-G2-S1-MID-017/problem.md
+ M db/problems/HN-2021-G1-S1-Final-002/assets/scan.png
+ M db/problems/HN-2021-G1-S1-Final-002/problem.md
+ M db/problems/HN-2021-G1-S1-Final-009/problem.md
+ M db/problems/HN-2025-G1-S1-MID-018/problem.md
+ M db/problems/HN-2025-G2-S1-MID-105/problem.md
+ M db/problems/HN-2025-G2-S1-MID-106/problem.md
+ M db/problems/JE-2024-G1-S1-Final-002/problem.md
+ M db/problems/JE-2024-G1-S1-Final-008/problem.md
+ M db/problems/JE-2024-G1-S1-Final-010/problem.md
+ M db/problems/JE-2024-G1-S1-Final-015/problem.md
+ M db/problems/JE-2025-G1-S1-MID-008/problem.md
+ M db/problems/JE-2025-G2-S1-MID-005/problem.md
+ M db/problems/JE-2025-G2-S1-MID-011/problem.md
+ M db/problems/JE-2025-G2-S1-MID-012/problem.md
+ M db/problems/JE-2025-G2-S1-MID-013/problem.md
+ M db/problems/JEW-2023-G1-S1-MID-016/problem.md
+ M db/problems/JEW-2023-G1-S1-MID-105/problem.md
+ M db/problems/JEW-2023-G2-S1-MID-ALG-008/problem.md
+ M db/problems/JEW-2023-G2-S1-MID-ALG-011/problem.md
+ M db/problems/JEW-2024-G1-S1-MID-016/problem.md
+ M db/problems/JEW-2024-G1-S1-MID-017/problem.md
+ M db/problems/JEW-2024-G1-S1-MID-103/problem.md
+ M db/problems/JJ-2022-G1-S1-MID-010/problem.md
+ M db/problems/JJ-2022-G2-S1-MID-ALG-003/problem.md
+ M db/problems/JJ-2023-G1-S1-MID-002/problem.md
+ M db/problems/JJ-2023-G1-S1-MID-007/problem.md
+ M db/problems/JJ-2024-G2-S1-MID-ALG-003/problem.md
+ M db/problems/JJ-2025-G2-S1-MID-003/problem.md
+ M db/problems/JJ-2025-G2-S1-MID-008/problem.md
+ M db/problems/JJ-2025-G2-S1-MID-013/problem.md
+ M db/problems/SY-2022-G1-S1-MID-015/problem.md
+ M db/problems/SY-2022-G1-S1-MID-102/problem.md
+ M db/problems/SY-2023-G1-S1-MID-007/problem.md
+ M db/problems/SY-2023-G1-S1-MID-105/problem.md
+ M db/problems/SY-2024-G2-S1-MID-ALG-003/problem.md
+ M db/problems/SY-2024-G2-S1-MID-ALG-010/problem.md
+ M db/problems/SY-2025-G1-S1-MID-001/problem.md
+ M db/problems/SY-2025-G1-S1-MID-101/problem.md
+ M db/problems/SY-2025-G1-S1-MID-103/problem.md
+ M db/problems/SY-2025-G1-S1-MID-104/problem.md
+ M renderer.py
+ M templates/admin.html
+ M templates/exam.html
+?? _tmp_bn_2020_g2_s1_mid_alg_ingest_report.txt
+?? _tmp_hn_2020_g2_s1_mid_alg_ingest_report.txt
+?? _tmp_je2020_ocr.txt
+?? _tmp_je2020_pages/
+?? _tmp_je_2020_g2_s1_mid_alg_ingest_report.txt
+?? _tmp_sy_2021_g1_s1_final_report.txt
+?? db/original/
+?? db/problems/BY-2020-G2-S1-MID-001/
+?? db/problems/BY-2020-G2-S1-MID-002/
+?? db/problems/BY-2020-G2-S1-MID-003/
+?? db/problems/BY-2020-G2-S1-MID-004/
+?? db/problems/BY-2020-G2-S1-MID-005/
+?? db/problems/BY-2020-G2-S1-MID-006/
+?? db/problems/BY-2020-G2-S1-MID-007/
+?? db/problems/BY-2020-G2-S1-MID-008/
+?? db/problems/BY-2020-G2-S1-MID-009/
+?? db/problems/BY-2020-G2-S1-MID-010/
+?? db/problems/BY-2020-G2-S1-MID-011/
+?? db/problems/BY-2020-G2-S1-MID-012/
+?? db/problems/BY-2020-G2-S1-MID-013/
+?? db/problems/BY-2020-G2-S1-MID-014/
+?? db/problems/BY-2020-G2-S1-MID-015/
+?? db/problems/BY-2020-G2-S1-MID-016/
+?? db/problems/BY-2020-G2-S1-MID-017/
+?? db/problems/BY-2020-G2-S1-MID-018/
+?? db/problems/BY-2020-G2-S1-MID-101/
+?? db/problems/BY-2020-G2-S1-MID-102/
+?? db/problems/BY-2020-G2-S1-MID-103/
+?? db/problems/BY-2020-G2-S1-MID-104/
+?? db/problems/HN-2020-G2-S1-MID-ALG-001/
+?? db/problems/HN-2020-G2-S1-MID-ALG-002/
+?? db/problems/HN-2020-G2-S1-MID-ALG-003/
+?? db/problems/HN-2020-G2-S1-MID-ALG-004/
+?? db/problems/HN-2020-G2-S1-MID-ALG-005/
+?? db/problems/HN-2020-G2-S1-MID-ALG-006/
+?? db/problems/HN-2020-G2-S1-MID-ALG-007/
+?? db/problems/HN-2020-G2-S1-MID-ALG-008/
+?? db/problems/HN-2020-G2-S1-MID-ALG-009/
+?? db/problems/HN-2020-G2-S1-MID-ALG-010/
+?? db/problems/HN-2020-G2-S1-MID-ALG-011/
+?? db/problems/HN-2020-G2-S1-MID-ALG-012/
+?? db/problems/HN-2020-G2-S1-MID-ALG-013/
+?? db/problems/HN-2020-G2-S1-MID-ALG-014/
+?? db/problems/HN-2020-G2-S1-MID-ALG-015/
+?? db/problems/HN-2020-G2-S1-MID-ALG-016/
+?? db/problems/HN-2020-G2-S1-MID-ALG-017/
+?? db/problems/HN-2020-G2-S1-MID-ALG-101/
+?? db/problems/HN-2020-G2-S1-MID-ALG-102/
+?? db/problems/HN-2020-G2-S1-MID-ALG-103/
+?? db/problems/HN-2020-G2-S1-MID-ALG-104/
+?? db/problems/HN-2020-G2-S1-MID-ALG-105/
+?? db/problems/HN-2020-G2-S1-MID-ALG-106/
+?? db/problems/JE-2020-G2-S1-MID-001/
+?? db/problems/JE-2020-G2-S1-MID-002/
+?? db/problems/JE-2020-G2-S1-MID-003/
+?? db/problems/JE-2020-G2-S1-MID-004/
+?? db/problems/JE-2020-G2-S1-MID-005/
+?? db/problems/JE-2020-G2-S1-MID-006/
+?? db/problems/JE-2020-G2-S1-MID-007/
+?? db/problems/JE-2020-G2-S1-MID-008/
+?? db/problems/JE-2020-G2-S1-MID-009/
+?? db/problems/JE-2020-G2-S1-MID-010/
+?? db/problems/JE-2020-G2-S1-MID-011/
+?? db/problems/JE-2020-G2-S1-MID-012/
+?? db/problems/JE-2020-G2-S1-MID-013/
+?? db/problems/JE-2020-G2-S1-MID-014/
+?? db/problems/JE-2020-G2-S1-MID-015/
+?? db/problems/JE-2020-G2-S1-MID-016/
+?? db/problems/JE-2020-G2-S1-MID-017/
+?? db/problems/JE-2020-G2-S1-MID-018/
+?? db/problems/JE-2020-G2-S1-MID-101/
+?? db/problems/JE-2020-G2-S1-MID-102/
+?? db/problems/JE-2020-G2-S1-MID-103/
+?? db/problems/JE-2020-G2-S1-MID-104/
+?? db/problems/JE-2020-G2-S1-MID-105/
+?? db/problems/JE-2020-G2-S1-MID-106/
+?? db/problems/SY-2021-G1-S1-Final-001/
+?? db/problems/SY-2021-G1-S1-Final-002/
+?? db/problems/SY-2021-G1-S1-Final-003/
+?? db/problems/SY-2021-G1-S1-Final-004/
+?? db/problems/SY-2021-G1-S1-Final-005/
+?? db/problems/SY-2021-G1-S1-Final-006/
+?? db/problems/SY-2021-G1-S1-Final-007/
+?? db/problems/SY-2021-G1-S1-Final-008/
+?? db/problems/SY-2021-G1-S1-Final-009/
+?? db/problems/SY-2021-G1-S1-Final-010/
+?? db/problems/SY-2021-G1-S1-Final-011/
+?? db/problems/SY-2021-G1-S1-Final-012/
+?? db/problems/SY-2021-G1-S1-Final-013/
+?? db/problems/SY-2021-G1-S1-Final-014/
+?? db/problems/SY-2021-G1-S1-Final-015/
+?? db/problems/SY-2021-G1-S1-Final-101/
+?? db/problems/SY-2021-G1-S1-Final-102/
+?? db/problems/SY-2021-G1-S1-Final-103/
+?? db/problems/SY-2021-G1-S1-Final-104/
+?? db/problems/SY-2021-G1-S1-Final-105/
+?? scripts/ingest_bn_2020_g2_s1_mid_alg_manual.py
+?? scripts/ingest_hn_2020_g2_s1_mid_alg_manual.py
+?? scripts/ingest_je_2020_g2_s1_mid_alg_manual.py
+?? scripts/ingest_sy_2021_g1_s1_final_com1_manual.py
+```

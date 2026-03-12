@@ -29,7 +29,7 @@ assets:
 ---
 
 ## Q
-$\sin\frac{7\pi}{6}-\cos\frac{11\pi}{3}+\tan\left(-\frac{9\pi}{4}\right)$의 값은?
+$\sin\dfrac{7\pi}{6}-\cos\dfrac{11\pi}{3}+\tan\left(-\dfrac{9\pi}{4}\right)$의 값은?
 
 ## Choices
 ① -2

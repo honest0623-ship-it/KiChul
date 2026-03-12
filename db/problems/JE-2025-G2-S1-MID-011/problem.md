@@ -27,7 +27,7 @@ assets:
 ## Q
 함수 $y=2^x$과 그 역함수 $y=g(x)$의 그래프가 다음과 같다. 이때, 점 $A$의 좌표를 $(a,b)$라 할 때, $\log_a b$의 값은? (단, 점선은 $x$축 또는 $y$축에 평행하다.)
 
-<img src="assets/scan.png" style="width: 60%; max-width: 60%;">
+<img src="assets/scan.png" style="width: 75%; max-width: 75%;">
 
 ## Choices
 ① $\dfrac12$

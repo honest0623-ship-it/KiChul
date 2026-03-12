@@ -34,17 +34,11 @@ assets:
 \[
 x^3-(2a+1)x^2+(a+1)^2x-(a^2+1)=0
 \]
-의 서로 다른 두 허근을 $\alpha$, $\beta$라 하자. 이때,
+의 서로 다른 두 허근을 $\alpha$, $\beta$라 하자. 이때, 
 \[
 \frac{\bar{\alpha}}{\alpha}+\frac{\bar{\beta}}{\beta}=1
-\]
-일 때, 양수 $a$의 값을 구하면?
-
-단,
-\[
-\bar{\alpha},\ \bar{\beta}
-\]
-는 각각 $\alpha$, $\beta$의 켤레복소수이다.
+\] 일 때, 양수 $a$의 값을 구하면?
+(단, $\bar{\alpha},\ \bar{\beta}$는 각각 $\alpha$, $\beta$의 켤레복소수이다.)
 
 ## Choices
 ① $\sqrt{3}$

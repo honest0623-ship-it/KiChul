@@ -24,17 +24,20 @@ assets:
 - assets/original/
 - assets/original/101.png
 ---
+
 ## Q
 방정식
 \[
 3x^2+8x+a=0
 \]
-의 두 실근의 차가 \(\frac{10}{3}\)일 때, 실수 \(a\)의 값을 구하시오.
+의 두 실근의 차가 \(\dfrac{10}{3}\)일 때, 실수 \(a\)의 값을 구하시오.
 
 ## Choices
 
+
 ## Answer
 -3
+
 ## Solution
 두 근을 $\alpha,\beta$라 하면
 $$

@@ -33,8 +33,7 @@ assets:
 x^2-5xy+4y^2=0\\
 x^2+2y^2=18
 \end{cases}
-\]
-의 해를 $x=\alpha$, $y=\beta$라 할 때, $\alpha\beta$의 값이 될 수 있는 수는? (단, $\alpha,\beta$는 실수)
+\]의 해를 $x=\alpha$, $y=\beta$라 할 때, $\alpha\beta$의 값이 될 수 있는 수는? (단, $\alpha,\beta$는 실수)
 
 ## Choices
 ① 6

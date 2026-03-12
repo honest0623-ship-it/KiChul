@@ -23,6 +23,7 @@ assets:
 - assets/original/
 - assets/original/008.png
 ---
+
 ## Q
 연립방정식
 $$
@@ -30,8 +31,7 @@ $$
 x^2-y=4 \\
 x+2y=13
 \end{cases}
-$$
-의 해를 $x=a,\ y=b$라 할 때, $a+b$의 값은? (단, $a,\ b$는 정수이다.)
+$$ 의 해를 $x=a,\ y=b$라 할 때, $a+b$의 값은? (단, $a,\ b$는 정수이다.)
 
 ## Choices
 ① $6$

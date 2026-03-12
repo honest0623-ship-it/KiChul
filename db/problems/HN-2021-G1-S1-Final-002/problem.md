@@ -31,7 +31,7 @@ assets:
 ## Q
 오른쪽 그림과 같이 높이가 \(12\)규빗인 대나무가 바람에 부러져서 그 끝이 처음 대나무가 나온 부분으로부터 \(6\)규빗 떨어진 곳에 닿았다. 이때 대나무의 부러진 부분의 길이를 구하면?
 
-<img src="assets/scan.png" alt="문항 삽화" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="문항 삽화" style="width:40% !important; max-width:40% !important; height:auto;" />
 
 ## Choices
 ① \(\dfrac{7}{2}\)

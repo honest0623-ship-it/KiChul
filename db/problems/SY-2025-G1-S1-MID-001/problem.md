@@ -23,15 +23,9 @@ assets:
 - assets/original/
 - assets/original/001.png
 ---
+
 ## Q
-\[
-x+y=2,\qquad x^2+y^2=6
-\]
-일 때,
-\[
-x^3+y^3
-\]
-의 값은?
+$x+y=2,  x^2+y^2=6$ 일 때,  $x^3+y^3$의 값은?
 
 ## Choices
 ① 11
@@ -39,7 +33,6 @@ x^3+y^3
 ③ 13
 ④ 14
 ⑤ 15
-
 
 ## Answer
 ④

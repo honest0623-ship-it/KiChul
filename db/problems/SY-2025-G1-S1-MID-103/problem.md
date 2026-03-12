@@ -24,13 +24,16 @@ assets:
 - assets/original/
 - assets/original/서답3번.png
 ---
+
 ## Q
-함수 \(y=-x^2+5x-3\)이 구간 \([a,4]\)에서 최댓값이 \(3\), 최솟값이 \(b\)일 때, \(a,\ b\)의 값을 각각 구하시오.
+함수 \(y=-x^2+5x-3\)이 구간 $a \le x \le 4$에서 최댓값이 \(3\), 최솟값이 \(b\)일 때, \(a,\ b\)의 값을 각각 구하시오.
 
 ## Choices
 
+
 ## Answer
 $a=3,\ b=1$
+
 ## Solution
 함수
 $$

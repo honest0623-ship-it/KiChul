@@ -30,6 +30,7 @@ assets:
 - assets/original/JE.2024.G1.S1.Final.COM1.pdf
 - assets/original/JE.2024.G1.S1.Final.COM1.010.png
 ---
+
 ## Q
 다음 그림과 같이 두 포물선
 \[
@@ -37,7 +38,7 @@ y=x^2-4x+6,\qquad y=-x^2+2x+6
 \]
 이 두 점 $A$, $B$에서 만난다. $y$축에 평행하고 두 점 $A$, $B$ 사이를 지나는 직선을 그어 두 포물선과 만나는 점을 각각 $P$, $Q$라 할 때, 사각형 $APBQ$의 넓이의 최댓값은?
 
-<img src="assets/scan.png" alt="문항 삽화" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="문항 삽화" style="width:70% !important; max-width:70% !important; height:auto;" />
 
 ## Choices
 ① $\frac{25}{4}$

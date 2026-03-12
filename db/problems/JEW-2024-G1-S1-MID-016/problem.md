@@ -8,32 +8,30 @@ exam: MID
 type: 객관식
 source_question_no: 16
 source_question_kind: objective
-source_question_label: "16"
+source_question_label: '16'
 difficulty: 4
 level: 4
-unit: "공통수학1(2022개정)>2. 방정식과 부등식>2-3. 여러 가지 방정식"
-unit_l1: "공통수학1(2022개정)"
-unit_l2: "2. 방정식과 부등식"
-unit_l3: "2-3. 여러 가지 방정식"
-source: "user_upload_2026-03-04"
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-3. 여러 가지 방정식
+unit_l1: 공통수학1(2022개정)
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-3. 여러 가지 방정식
+source: user_upload_2026-03-04
 tags:
-  - 자동입력
-  - 객관식
-  - 출제번호-16
-  - OCR
-  - AI
+- 자동입력
+- 객관식
+- 출제번호-16
+- OCR
+- AI
 assets:
-  # Raw source image archive.
-  - assets/original/
-  - assets/original/016_2-3. 여러 가지 방정식.png
+- assets/original/
+- assets/original/016_2-3. 여러 가지 방정식.png
 ---
 
 ## Q
 삼차방정식 \(x^3-4x^2+6x-4=0\)의 한 허근을 \(w\)라 할 때,
 \[
 \left\{w(\overline{w}-1)\right\}^n=256
-\]
-을 만족시키는 자연수 \(n\)의 값은? (단, \(\overline{w}\)는 \(w\)의 켤레복소수이다.)
+\] 을 만족시키는 자연수 \(n\)의 값은? (단, \(\overline{w}\)는 \(w\)의 켤레복소수이다.)
 
 ## Choices
 ① 4

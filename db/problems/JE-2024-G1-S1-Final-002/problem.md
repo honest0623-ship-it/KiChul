@@ -28,19 +28,9 @@ assets:
 - assets/original/
 - assets/original/JE.2024.G1.S1.Final.COM1.pdf
 ---
+
 ## Q
-\[
--1\le x\le 2
-\]
-의 범위에서 이차함수
-\[
-y=x^2-2x+5
-\]
-의 최댓값을 $M$, 최솟값을 $m$이라 할 때,
-\[
-M-m
-\]
-의 값은?
+$-1\le x\le 2$의 범위에서 이차함수 $y=x^2-2x+5$의 최댓값을 $M$, 최솟값을 $m$이라 할 때, $M-m$의 값은?
 
 ## Choices
 ① $3$

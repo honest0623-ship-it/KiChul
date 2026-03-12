@@ -26,16 +26,13 @@ subject: ALG
 ---
 
 ## Q
-그림과 같이 $a>1$인 상수 $a$와 $b>a+1$인 상수 $b$에 대하여
-직선 $y=-x+b$가 두 곡선 $y=a^x$, $y=\log_a(x-1)-1$와 만나는 점을 각각 $A$, $B$라 하고,
-직선 $y=-x+\frac{10}{3}b$가 두 곡선 $y=a^x$, $y=\log_a(x-1)-1$와 만나는 점을 각각 $C$, $D$라 하자.
-직선 $y=x$가 두 직선 $y=-x+b$, $y=-x+\frac{10}{3}b$와 만나는 점을 각각 $E$, $F$라 할 때,
+그림과 같이 $a>1$인 상수 $a$와 $b>a+1$인 상수 $b$에 대하여 직선 $y=-x+b$가 두 곡선 $y=a^x$, $y=\log_a(x-1)-1$와 만나는 점을 각각 $A$, $B$라 하고,
+직선 $y=-x+\frac{10}{3}b$가 두 곡선 $y=a^x$, $y=\log_a(x-1)-1$와 만나는 점을 각각 $C$, $D$라 하자. 직선 $y=x$가 두 직선 $y=-x+b$, $y=-x+\frac{10}{3}b$와 만나는 점을 각각 $E$, $F$라 할 때,
 $$
 \overline{FD}=\sqrt2(b+1),\quad \overline{AE}=\frac{\sqrt2}{6}b
-$$
-이다. $\overline{EB}\times\overline{CF}$의 값을 구하시오.
+$$이다. $\overline{EB}\times\overline{CF}$의 값을 구하시오.
 
-<img src="assets/scan.png" style="width: 60%; max-width: 60%;">
+<img src="assets/scan.png" style="width: 75%; max-width: 75%;">
 
 ## Choices
 

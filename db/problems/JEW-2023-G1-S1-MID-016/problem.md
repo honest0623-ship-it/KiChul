@@ -5,31 +5,30 @@ year: 2023
 grade: 1
 semester: 1
 exam: MID
-type: "객관식"
+type: 객관식
 source_question_no: 16
 source_question_kind: objective
-source_question_label: "16"
+source_question_label: '16'
 difficulty: 4
 level: 4
-unit: "공통수학1(2022개정)>2. 방정식과 부등식>2-1. 복소수와 이차방정식"
-unit_l1: "공통수학1(2022개정)"
-unit_l2: "2. 방정식과 부등식"
-unit_l3: "2-1. 복소수와 이차방정식"
-source: "user_upload_2026-03-04"
+unit: 공통수학1(2022개정)>2. 방정식과 부등식>2-1. 복소수와 이차방정식
+unit_l1: 공통수학1(2022개정)
+unit_l2: 2. 방정식과 부등식
+unit_l3: 2-1. 복소수와 이차방정식
+source: user_upload_2026-03-04
 tags:
-  - 수동작성
-  - 객관식
-  - 출제번호-16
+- 수동작성
+- 객관식
+- 출제번호-16
 assets:
-  - assets/original/
-  - assets/original/016_2-1. 복소수와 이차방정식.png
+- assets/original/
+- assets/original/016_2-1. 복소수와 이차방정식.png
 ---
 
 ## Q
 \[
 \left(\frac{\sqrt{2}}{1+i}\right)^n+\left(\frac{-1+\sqrt{3}i}{2}\right)^n=2
-\]
-를 만족시키는 자연수 \(n\)의 최솟값은? (단, \(i=\sqrt{-1}\))
+\] 를 만족시키는 자연수 \(n\)의 최솟값은? (단, \(i=\sqrt{-1}\))
 
 ## Choices
 ① 6

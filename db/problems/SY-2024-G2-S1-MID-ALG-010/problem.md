@@ -34,7 +34,7 @@ assets:
 
 다음 그림은 함수 $y=2^x$, $y=\log_2 x$의 그래프와 직선 $y=x$이다. $a$, $b$, $c$의 곱인 $abc$의 값은? (단, $a$, $b$, $c$는 상수)
 
-<img src="assets/scan.png" alt="지수함수와 로그함수의 그래프" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="지수함수와 로그함수의 그래프" style="width:75% !important; max-width:75% !important; height:auto;" />
 
 ## Choices
 ① $-\sqrt{3}$

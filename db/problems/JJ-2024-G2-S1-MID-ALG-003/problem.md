@@ -29,7 +29,7 @@ assets:
 ---
 
 ## Q
-$\log_3\left(2-\dfrac12\right)+\log_3\left(2-\dfrac23\right)+\log_3\left(2-\dfrac34\right)+\cdots+\log_3\left(2-\dfrac{52}{53}\right)$의 값은?
+$\log_3\left(2-\dfrac12\right)+\log_3\left(2-\dfrac23\right)+\log_3\left(2-\dfrac34\right)$$+\cdots+\log_3\left(2-\dfrac{52}{53}\right)$의 값은?
 
 ## Choices
 ① 1

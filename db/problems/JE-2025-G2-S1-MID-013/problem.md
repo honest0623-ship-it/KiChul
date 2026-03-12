@@ -25,6 +25,7 @@ assets:
 - assets/original/013_1-2. 지수함수.png
 - assets/original/013_1-2. 지수함수_scan.png
 ---
+
 ## Q
 다음 그림의 일차함수 $y=f(x)$와 $y=g(x)$에 대하여
 $$
@@ -34,7 +35,7 @@ $$
 $$
 을 만족하는 정수 $x$값의 합을 구하면?
 
-<img src="assets/scan.png" style="width: 100%; max-width: 100%;">
+<img src="assets/scan.png" style="width: 80%; max-width: 80%;">
 
 ## Choices
 ① $-3$  

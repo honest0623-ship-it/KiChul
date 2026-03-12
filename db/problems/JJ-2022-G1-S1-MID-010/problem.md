@@ -28,12 +28,17 @@ assets:
 - assets/original/
 - assets/original/JJ.2022.G1.S1.MID.COM1.pdf
 ---
+
 ## Q
 세 변의 길이가 $a$, $b$, $c$인 삼각형 $ABC$가 다음 조건을 만족한다.
 
 (가) $x$에 관한 다항식
-$f(x)=x^3-(b+c)x^2-(b^2+c^2)x+b^3+c^3+b^2c+bc^2$
-은 $x-a$로 나누어 떨어진다.
+\[
+\begin{aligned}
+f(x) &= x^3-(b+c)x^2-(b^2+c^2)x \\
+     &\quad + b^3+c^3+b^2c+bc^2
+\end{aligned}
+\]은 $x-a$로 나누어 떨어진다.
 (나) $2b=3(a-c)$
 (다) 삼각형 $ABC$의 넓이는 $30$이다.
 

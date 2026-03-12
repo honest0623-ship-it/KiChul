@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from threading import Lock
 from typing import Any, Dict, List
 from urllib.parse import urlparse
@@ -130,6 +131,9 @@ DEFAULTS = {
     "semester": "1",
     "exam": "MID",
 }
+DEFAULT_EXAM_TITLE = "내신 기출"
+DEFAULT_SORT_FIELD_SLOTS = ("school", "unit", "year")
+PRINT_PROBLEMS_PER_PAGE_CHOICES = {4, 6, 8}
 SORT_FIELDS = {"default", "unit", "school", "year", "source", "manual"}
 SORT_ORDERS = {"asc", "desc"}
 SUBJECT_CODE_ALIASES = {
@@ -239,6 +243,25 @@ def _parse_int(raw: str, default: int) -> int:
         return int(raw)
     except (TypeError, ValueError):
         return default
+
+
+def _normalize_problems_per_page(raw: str | None, default: int = 8) -> int:
+    value = _parse_int(str(raw or "").strip(), default)
+    if value in PRINT_PROBLEMS_PER_PAGE_CHOICES:
+        return value
+    return default
+
+
+def _normalize_paper(raw: str | None) -> str:
+    token = str(raw or "").strip().upper()
+    if token in {"A4", "B4"}:
+        return token
+    return "A4"
+
+
+def _normalize_title(raw: str | None, default: str = DEFAULT_EXAM_TITLE) -> str:
+    token = str(raw or "").strip()
+    return token or default
 
 
 def _extract_ids(raw: str) -> List[str]:
@@ -2035,9 +2058,9 @@ def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) ->
     legacy_sort_field = request.args.get("sort_field", "")
     sort_field_slots = _normalize_sort_field_slots(
         [
-            request.args.get("sort_field_1", legacy_sort_field or "source"),
-            request.args.get("sort_field_2", "none"),
-            request.args.get("sort_field_3", "none"),
+            request.args.get("sort_field_1", legacy_sort_field or DEFAULT_SORT_FIELD_SLOTS[0]),
+            request.args.get("sort_field_2", DEFAULT_SORT_FIELD_SLOTS[1]),
+            request.args.get("sort_field_3", DEFAULT_SORT_FIELD_SLOTS[2]),
         ]
     )
 
@@ -2064,16 +2087,19 @@ def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) ->
         "sort_field_2": sort_field_slots[1],
         "sort_field_3": sort_field_slots[2],
         "sort_order": _normalize_sort_order(request.args.get("sort_order", "asc")),
+        "paper": _normalize_paper(request.args.get("paper", "A4")),
+        "problems_per_page": _normalize_problems_per_page(request.args.get("problems_per_page", "8")),
         "question_count": request.args.get("question_count", "0"),
         "show_source_info": request.args.get("show_source_info", "1") != "0",
         "show_unit_info": request.args.get("show_unit_info", "1") != "0",
+        "show_outer_border": request.args.get("show_outer_border", "1") != "0",
+        "show_inner_dividers": request.args.get("show_inner_dividers", "1") != "0",
         "teacher_view": request.args.get("teacher_view", "0") == "1",
         "reset_question_number_by_school": request.args.get("reset_question_number_by_school", "0") == "1",
         "exam_sheet": request.args.get("exam_sheet", "1") != "0",
-        "title": request.args.get(
-            "title",
-            f"{defaults['school']} {defaults['year']} G{defaults['grade']} S{defaults['semester']} {defaults['exam']}",
-        ),
+        "answer_sheet": request.args.get("answer_sheet", "0") == "1",
+        "solution_sheet": request.args.get("solution_sheet", "1") != "0",
+        "title": _normalize_title(request.args.get("title"), default=DEFAULT_EXAM_TITLE),
     }
 
 
@@ -3393,22 +3419,27 @@ def render_pdf():
     legacy_sort_field = request.form.get("sort_field", "")
     sort_field_slots = _normalize_sort_field_slots(
         [
-            request.form.get("sort_field_1", legacy_sort_field or "source"),
-            request.form.get("sort_field_2", "none"),
-            request.form.get("sort_field_3", "none"),
+            request.form.get("sort_field_1", legacy_sort_field or DEFAULT_SORT_FIELD_SLOTS[0]),
+            request.form.get("sort_field_2", DEFAULT_SORT_FIELD_SLOTS[1]),
+            request.form.get("sort_field_3", DEFAULT_SORT_FIELD_SLOTS[2]),
         ]
     )
     effective_sort_fields = _effective_sort_fields(sort_field_slots)
     primary_sort_field = sort_field_slots[0]
     sort_order = _normalize_sort_order(request.form.get("sort_order", "asc"))
+    paper = _normalize_paper(request.form.get("paper", "A4"))
+    problems_per_page = _normalize_problems_per_page(request.form.get("problems_per_page", "8"))
     question_count = max(_parse_int(request.form.get("question_count", "0"), 0), 0)
     show_source_info = bool(request.form.get("show_source_info"))
     show_unit_info = bool(request.form.get("show_unit_info"))
+    show_outer_border = bool(request.form.get("show_outer_border"))
+    show_inner_dividers = bool(request.form.get("show_inner_dividers"))
     teacher_view = bool(request.form.get("teacher_view"))
     reset_question_number_by_school = bool(request.form.get("reset_question_number_by_school"))
     include_exam_sheet = bool(request.form.get("exam_sheet"))
     append_answer_sheet = bool(request.form.get("answer_sheet"))
     append_solution_sheet = bool(request.form.get("solution_sheet"))
+    title = _normalize_title(request.form.get("title"), default=DEFAULT_EXAM_TITLE)
 
     problem_meta = _scan_problem_meta(
         data_sources=[selected_data_source],
@@ -3502,14 +3533,20 @@ def render_pdf():
             "sort_field_2": sort_field_slots[1],
             "sort_field_3": sort_field_slots[2],
             "sort_order": sort_order,
+            "paper": paper,
+            "problems_per_page": str(problems_per_page),
             "manual_order_ids": " ".join(manual_order_ids),
             "manual_selected_ids": " ".join(manual_selected_ids),
             "question_count": str(question_count),
             "show_source_info": "1" if show_source_info else "0",
             "show_unit_info": "1" if show_unit_info else "0",
+            "show_outer_border": "1" if show_outer_border else "0",
+            "show_inner_dividers": "1" if show_inner_dividers else "0",
             "teacher_view": "1" if teacher_view else "0",
             "reset_question_number_by_school": "1" if reset_question_number_by_school else "0",
             "exam_sheet": "1" if include_exam_sheet else "0",
+            "answer_sheet": "1" if append_answer_sheet else "0",
+            "solution_sheet": "1" if append_solution_sheet else "0",
         }
         return redirect(url_for("index", **next_defaults))
 
@@ -3553,14 +3590,20 @@ def render_pdf():
             "sort_field_2": sort_field_slots[1],
             "sort_field_3": sort_field_slots[2],
             "sort_order": sort_order,
+            "paper": paper,
+            "problems_per_page": str(problems_per_page),
             "manual_order_ids": " ".join(manual_order_ids),
             "manual_selected_ids": " ".join(manual_selected_ids),
             "question_count": str(question_count),
             "show_source_info": "1" if show_source_info else "0",
             "show_unit_info": "1" if show_unit_info else "0",
+            "show_outer_border": "1" if show_outer_border else "0",
+            "show_inner_dividers": "1" if show_inner_dividers else "0",
             "teacher_view": "1" if teacher_view else "0",
             "reset_question_number_by_school": "1" if reset_question_number_by_school else "0",
             "exam_sheet": "1" if include_exam_sheet else "0",
+            "answer_sheet": "1" if append_answer_sheet else "0",
+            "solution_sheet": "1" if append_solution_sheet else "0",
             "selector_ids": " ".join(selector_ids),
         }
         return redirect(url_for("index", **next_defaults))
@@ -3587,21 +3630,22 @@ def render_pdf():
             "sort_field_2": sort_field_slots[1],
             "sort_field_3": sort_field_slots[2],
             "sort_order": sort_order,
+            "paper": paper,
+            "problems_per_page": str(problems_per_page),
             "manual_order_ids": " ".join(manual_order_ids),
             "manual_selected_ids": " ".join(manual_selected_ids),
             "question_count": str(question_count),
             "show_source_info": "1" if show_source_info else "0",
             "show_unit_info": "1" if show_unit_info else "0",
+            "show_outer_border": "1" if show_outer_border else "0",
+            "show_inner_dividers": "1" if show_inner_dividers else "0",
             "teacher_view": "1" if teacher_view else "0",
             "reset_question_number_by_school": "1" if reset_question_number_by_school else "0",
             "exam_sheet": "1" if include_exam_sheet else "0",
+            "answer_sheet": "1" if append_answer_sheet else "0",
+            "solution_sheet": "1" if append_solution_sheet else "0",
             "selector_ids": " ".join(selector_ids),
-            "title": request.form.get(
-                "title",
-                f"{_first_or(schools, defaults['school'])} {_first_or(years, defaults['year'])} "
-                f"G{_first_or(grades, defaults['grade'])} S{_first_or(semesters, defaults['semester'])} "
-                f"{_first_or(exams, defaults['exam'])}",
-            ),
+            "title": title,
         }
         return redirect(url_for("index", **next_defaults))
 
@@ -3612,30 +3656,45 @@ def render_pdf():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = _resolve_unique_pdf_path(OUTPUT_DIR / out_name)
 
+    dirs_manifest = tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".txt",
+        prefix="build_exam_dirs_",
+        dir=str(OUTPUT_DIR),
+        delete=False,
+        encoding="utf-8",
+        newline="\n",
+    )
+    dirs_manifest_path = Path(dirs_manifest.name)
+    try:
+        for problem_dir in selected_problem_dirs:
+            dirs_manifest.write(f"{problem_dir}\n")
+    finally:
+        dirs_manifest.close()
+
     cmd = [
         sys.executable,
         "build_exam.py",
         "--out",
         str(out_path),
         "--paper",
-        request.form.get("paper", "A4"),
-        "--columns",
-        request.form.get("columns", "2"),
+        paper,
+        "--problems-per-page",
+        str(problems_per_page),
         "--title",
-        request.form.get(
-            "title",
-            f"{_first_or(schools, defaults['school'])} {_first_or(years, defaults['year'])} "
-            f"G{_first_or(grades, defaults['grade'])} S{_first_or(semesters, defaults['semester'])} "
-            f"{_first_or(exams, defaults['exam'])}",
-        ),
-        "--dirs",
-        *selected_problem_dirs,
+        title,
+        "--dirs-file",
+        str(dirs_manifest_path),
     ]
 
     if show_source_info:
         cmd.append("--show-source-info")
     if show_unit_info:
         cmd.append("--show-unit-info")
+    if not show_outer_border:
+        cmd.append("--outer-border-off")
+    if not show_inner_dividers:
+        cmd.append("--inner-dividers-off")
     if teacher_view:
         cmd.append("--teacher-view")
     if reset_question_number_by_school:
@@ -3654,15 +3713,18 @@ def render_pdf():
     if append_answer_sheet or append_solution_sheet:
         cmd.append("--append-sheets-to-out")
 
-    completed = subprocess.run(
-        cmd,
-        cwd=str(BASE_DIR),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            cmd,
+            cwd=str(BASE_DIR),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    finally:
+        dirs_manifest_path.unlink(missing_ok=True)
 
     if completed.returncode != 0:
         flash("PDF 생성 실패", "error")
@@ -3704,21 +3766,22 @@ def render_pdf():
         "sort_field_2": sort_field_slots[1],
         "sort_field_3": sort_field_slots[2],
         "sort_order": sort_order,
+        "paper": paper,
+        "problems_per_page": str(problems_per_page),
         "manual_order_ids": " ".join(manual_order_ids),
         "manual_selected_ids": " ".join(manual_selected_ids),
         "question_count": str(question_count),
         "show_source_info": "1" if show_source_info else "0",
         "show_unit_info": "1" if show_unit_info else "0",
+        "show_outer_border": "1" if show_outer_border else "0",
+        "show_inner_dividers": "1" if show_inner_dividers else "0",
         "teacher_view": "1" if teacher_view else "0",
         "reset_question_number_by_school": "1" if reset_question_number_by_school else "0",
         "exam_sheet": "1" if include_exam_sheet else "0",
+        "answer_sheet": "1" if append_answer_sheet else "0",
+        "solution_sheet": "1" if append_solution_sheet else "0",
         "selector_ids": " ".join(selector_ids),
-        "title": request.form.get(
-            "title",
-            f"{_first_or(schools, defaults['school'])} {_first_or(years, defaults['year'])} "
-            f"G{_first_or(grades, defaults['grade'])} S{_first_or(semesters, defaults['semester'])} "
-            f"{_first_or(exams, defaults['exam'])}",
-        ),
+        "title": title,
     }
     return redirect(url_for("index", **next_defaults))
 

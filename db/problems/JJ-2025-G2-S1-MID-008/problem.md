@@ -24,6 +24,7 @@ assets:
 - assets/scan.png
 - assets/original/JJ-2025-G2-S1-MID-008_original.png
 ---
+
 ## Q
 다음 그림은 함수
 \[
@@ -32,11 +33,9 @@ y=-\left(\frac12\right)^{{x+a}}+b
 의 그래프이다. 상수 \(a,\ b\)에 대하여 \(a+b\)의 값은?
 
 
-<img src="assets/scan.png" alt="문항 도형" style="width:100% !important; max-width:100% !important; height:auto;" />
+<img src="assets/scan.png" alt="문항 도형" style="width:60% !important; max-width:60% !important; height:auto;" />
 
 ## Choices
-
-
 ① -3
 ② -1
 ③ 1

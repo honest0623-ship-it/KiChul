@@ -32,7 +32,7 @@ subject: ALG
 ## Q
 그림과 같이 직선 $y=-x+6$이 두 함수 $y=a^x$, $y=\log_a x$의 그래프와 만나는 점을 각각 A, B라 하고 $x$축과 만나는 점을 C라 하자. 함수 $y=a^x$의 그래프와 $y$축의 교점을 D, 함수 $y=\log_a x$의 그래프와 $x$축의 교점을 E라 하자. $\overline{AB}=\overline{BC}$일 때, 사각형 ADEB의 넓이는? (단, $a>1$)
 
-<img src="assets/scan.png" style="width: 80%; max-width: 80%;">
+<img src="assets/scan.png" style="width: 60%; max-width: 60%;">
 
 ## Choices
 ① $\frac{11}{2}$

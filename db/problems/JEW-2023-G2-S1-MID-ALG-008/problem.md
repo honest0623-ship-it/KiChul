@@ -37,7 +37,7 @@ $$
 의 그래프가 아래의 그림과 같을 때, $ab$의 값은?
 (단, $a,\ b$는 상수이고 직선 $x=2$는 점근선이다.)
 
-<img src="assets/scan.png" alt="JEW-2023-G2-S1-MID-ALG-008 graph" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="JEW-2023-G2-S1-MID-ALG-008 graph" style="width:75% !important; max-width:75% !important; height:auto;" />
 
 ## Choices
 ① $-3$

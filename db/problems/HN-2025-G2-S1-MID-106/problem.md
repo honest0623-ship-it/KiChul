@@ -31,11 +31,10 @@ $\angle ACB=\frac\pi2$이고 삼각형 $ABC$의 넓이는 4이다.
 자연수 $n$에 대하여 $0\le x\le\frac{2}{b}$일 때, 방정식
 $$
 a\cos(bn\pi x)=\frac{2}{n}
-$$
-의 모든 실근의 합을 $f(n)$이라 하자.
+$$의 모든 실근의 합을 $f(n)$이라 하자.
 부등식 $20\le f(n)\le 40$을 만족시키는 모든 자연수 $n$의 값의 합을 구하시오.
 
-<img src="assets/scan.png" style="width: 60%; max-width: 60%;">
+<img src="assets/scan.png" style="width: 75%; max-width: 75%;">
 
 ## Choices
 

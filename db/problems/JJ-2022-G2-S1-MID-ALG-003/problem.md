@@ -30,7 +30,7 @@ assets:
 ---
 
 ## Q
-$\log\left(1+\dfrac{1}{1}\right)+\log\left(1+\dfrac{1}{2}\right)+\log\left(1+\dfrac{1}{3}\right)+\cdots+\log\left(1+\dfrac{1}{99}\right)$의 값은?
+$\log\left(1+\dfrac{1}{1}\right)+\log\left(1+\dfrac{1}{2}\right)+\log\left(1+\dfrac{1}{3}\right)$$+\cdots+\log\left(1+\dfrac{1}{99}\right)$의 값은?
 
 ## Choices
 ① $2$

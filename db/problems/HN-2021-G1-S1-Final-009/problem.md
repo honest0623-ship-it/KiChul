@@ -31,10 +31,9 @@ assets:
 ## Q
 오른쪽 그림과 같이 지점 \(O\)에서 수직으로 만나는 직선 도로가 있다. 서로 다른 도로에 있는 슬기와 현지가 지점 \(O\)에서 각각 \(1\text{ km}\) 떨어진 곳에서 1분에 \(30\text{ m}\), \(40\text{ m}\)의 일정한 속력으로 지점 \(O\)를 향하여 직진하였다. 두 사람이 동시에 출발할 때, 두 사람 사이의 거리가 가장 가까워지는 것은 출발한 지 몇 분 후인지 구하면?
 
-<img src="assets/scan.png" alt="문항 삽화" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="문항 삽화" style="width:40% !important; max-width:60% !important; height:auto;" />
 
 ## Choices
-
 ① 7분 후
 ② 14분 후
 ③ 28분 후

@@ -21,6 +21,7 @@ unit_l1: 공통수학1(2022개정)
 unit_l2: 2. 방정식과 부등식
 unit_l3: 2-2. 이차방정식과 이차함수
 ---
+
 ## Q
 오른쪽 그림의 직사각형 $ABCD$에서 두 점 $A$와 $B$는 $x$축 위에 있고,
 두 점 $C$와 $D$는 이차함수
@@ -33,7 +34,7 @@ $$
 
 (단, 두 점 $C,D$는 제1사분면 위의 점이다.) (4.5점)
 
-<img src="assets/scan.png" alt="figure" style="width:66% !important; max-width:66% !important; height:auto;" />
+<img src="assets/scan.png" alt="figure" style="width:40% !important; max-width:40% !important; height:auto;" />
 
 ## Choices
 ① 8  
@@ -83,4 +84,3 @@ $$
 \beta=A(\tfrac12)=-4\cdot \tfrac18+9\cdot \tfrac12=-\tfrac12+\tfrac{9}{2}=4.
 $$
 따라서 $\alpha+\beta=10+4=14$ (정답 ④).
-

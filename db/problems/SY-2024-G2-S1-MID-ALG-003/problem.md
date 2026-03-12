@@ -32,7 +32,7 @@ assets:
 ## Q
 시초선 $OX$와 동경 $OP$의 위치가 오른쪽 그림과 같을 때, 다음 중 동경 $OP$가 나타내는 각이 될 수 없는 것은?
 
-<img src="assets/scan.png" alt="동경 OP" style="width:60% !important; max-width:60% !important; height:auto;" />
+<img src="assets/scan.png" alt="동경 OP" style="width:40% !important; max-width:40% !important; height:auto;" />
 
 ## Choices
 ① $-670^\circ$

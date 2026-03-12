@@ -26,9 +26,9 @@ assets:
 ## Q
 다음 표에 대하여 $\sin(abcd)^\circ$의 값은?
 
-| 육십분법 | $30^\circ$ | $a^\circ$ | $60^\circ$ | $b^\circ$ |
-| --- | --- | --- | --- | --- |
-| 호도법 | $c\pi$ | $\frac{\pi}{4}$ | $d\pi$ | $\frac{\pi}{2}$ |
+육십분법: $30^\circ,\ a^\circ,\ 60^\circ,\ b^\circ$
+
+호도법: $c\pi,\ \dfrac{\pi}{4},\ d\pi,\ \dfrac{\pi}{2}$
 
 ## Choices
 ① $-\frac{\sqrt{3}}{2}$
