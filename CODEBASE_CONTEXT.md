@@ -27,10 +27,12 @@ python app.py
 ## 3) Key Files
 
 - `app.py`: Flask web UI for filtering/selecting problems and PDF generation.
-- `templates/admin.html`: Web admin page (render controls + per-problem metadata/body edit UI).
+- `templates/admin.html`: Web admin page shell/template (UI markup + bootstrap payload).
+- `static/admin.js`: Main admin frontend logic (filters/sorting/editor/similar-candidate workflows).
 - `build_exam.py`: CLI entry point for exam/answer/solution PDF generation.
 - `parser.py`: Parses `problem.md` (front-matter + sections).
 - `renderer.py`: HTML/MathJax render and Playwright PDF output.
+- `services/ai_runtime.py`: AI provider model catalog + generation API call/parsing utilities.
 - `templates/exam.html`: print layout template.
 
 ## 4) Request Flow
