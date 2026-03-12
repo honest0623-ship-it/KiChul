@@ -1915,3 +1915,1628 @@
       };
 
     })();
+
+    (function () {
+      const batchSelect = document.getElementById("similar-batch-select");
+      if (!batchSelect) return;
+
+      const batchRefreshBtn = document.getElementById("similar-batch-refresh");
+      const batchLoadBtn = document.getElementById("similar-batch-load");
+      const batchSummary = document.getElementById("similar-batch-summary");
+      const candidateList = document.getElementById("similar-candidate-list");
+      const checkAllBtn = document.getElementById("similar-check-all");
+      const uncheckAllBtn = document.getElementById("similar-uncheck-all");
+      const validateSelectedBtn = document.getElementById("similar-validate-selected");
+      const validateAllBtn = document.getElementById("similar-validate-all");
+      const promoteSelectedBtn = document.getElementById("similar-promote-selected");
+      const maxSimilarityInput = document.getElementById("similar-max-similarity");
+      const aiProviderInput = document.getElementById("similar-ai-provider");
+      const aiModelInput = document.getElementById("similar-ai-model");
+      const aiKeyLabel = document.getElementById("similar-api-key-label");
+      const aiKeyInput = document.getElementById("similar-api-key");
+      const aiSaveBtn = document.getElementById("similar-ai-save");
+      const aiClearKeyBtn = document.getElementById("similar-ai-clear-key");
+      const aiStatusEl = document.getElementById("similar-ai-status");
+      const seedSchoolInput = document.getElementById("similar-seed-school");
+      const seedYearInput = document.getElementById("similar-seed-year");
+      const seedGradeInput = document.getElementById("similar-seed-grade");
+      const seedSemesterInput = document.getElementById("similar-seed-semester");
+      const seedExamInput = document.getElementById("similar-seed-exam");
+      const seedSubjectInput = document.getElementById("similar-seed-subject");
+      const seedPatternInput = document.getElementById("similar-seed-pattern");
+      const seedUnitKeywordInput = document.getElementById("similar-seed-unit-keyword");
+      const seedSearchBtn = document.getElementById("similar-seed-search");
+      const seedResetBtn = document.getElementById("similar-seed-reset");
+      const seedCheckAllBtn = document.getElementById("similar-seed-check-all");
+      const seedUncheckAllBtn = document.getElementById("similar-seed-uncheck-all");
+      const seedResultList = document.getElementById("similar-seed-result-list");
+      const seedSelectionStatus = document.getElementById("similar-seed-selection-status");
+      const seedPreviewTitle = document.getElementById("similar-seed-preview-title");
+      const seedPreviewSubtitle = document.getElementById("similar-seed-preview-subtitle");
+      const seedPreviewContent = document.getElementById("similar-seed-preview-content");
+      const generateBatchIdInput = document.getElementById("similar-generate-batch-id");
+      const generateVariantsInput = document.getElementById("similar-generate-variants");
+      const generateTypeInput = document.getElementById("similar-generate-type");
+      const generateRunBtn = document.getElementById("similar-generate-run");
+      const generateRetryFailedBtn = document.getElementById("similar-generate-retry-failed");
+      const generateStatusEl = document.getElementById("similar-generate-status");
+      const previewTitle = document.getElementById("similar-preview-title");
+      const previewSubtitle = document.getElementById("similar-preview-subtitle");
+      const previewContent = document.getElementById("similar-preview-content");
+      const editorStatus = document.getElementById("similar-editor-status");
+      const contentReloadBtn = document.getElementById("similar-content-reload");
+      const previewRenderBtn = document.getElementById("similar-preview-render");
+      const contentSaveBtn = document.getElementById("similar-content-save");
+      const reviewSaveBtn = document.getElementById("similar-review-save");
+      const qInput = document.getElementById("similar-editor-q");
+      const choicesInput = document.getElementById("similar-editor-choices");
+      const answerInput = document.getElementById("similar-editor-answer");
+      const solutionInput = document.getElementById("similar-editor-solution");
+      const reviewStatusInput = document.getElementById("similar-review-status");
+      const reviewNoteInput = document.getElementById("similar-review-note");
+
+      const state = {
+        bootstrapped: false,
+        requestToken: 0,
+        batchId: "",
+        activeCandidateId: "",
+        checkedIds: new Set(),
+        batches: [],
+        batchInfoById: new Map(),
+        candidates: [],
+        contentCache: new Map(),
+        previewCache: new Map(),
+        aiConfigLoaded: false,
+        aiHasKey: false,
+        aiProviders: ["gemini", "groq", "openai"],
+        aiModelsByProvider: {},
+        aiDefaultModels: {},
+        aiProviderDirty: false,
+        seedSearchRows: [],
+        seedCheckedIds: new Set(),
+        seedActiveId: "",
+        seedPreviewCache: new Map(),
+      };
+
+      const escapeHtml = (value) =>
+        String(value || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+
+      const typeset = (element) => {
+        if (!element || !window.MathJax || typeof window.MathJax.typesetPromise !== "function") return;
+        window.MathJax.typesetPromise([element]).catch((error) => {
+          console.warn("MathJax typeset failed:", error);
+        });
+      };
+
+      const setEditorStatus = (message, isError = false) => {
+        if (!editorStatus) return;
+        editorStatus.textContent = String(message || "");
+        editorStatus.style.color = isError ? "#b91c1c" : "#475569";
+      };
+
+      const setAiStatus = (message, isError = false) => {
+        if (!aiStatusEl) return;
+        aiStatusEl.textContent = String(message || "");
+        aiStatusEl.style.color = isError ? "#b91c1c" : "#475569";
+      };
+
+      const setGenerateStatus = (message, isError = false) => {
+        if (!generateStatusEl) return;
+        generateStatusEl.textContent = String(message || "");
+        generateStatusEl.style.color = isError ? "#b91c1c" : "#475569";
+      };
+
+      const parseSeedIds = (raw) => {
+        const token = String(raw || "").trim();
+        if (!token) return [];
+        const parts = token.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean);
+        const unique = [];
+        const seen = new Set();
+        parts.forEach((item) => {
+          if (seen.has(item)) return;
+          seen.add(item);
+          unique.push(item);
+        });
+        return unique;
+      };
+
+      const setSeedSelectionStatus = (message, isError = false) => {
+        if (!seedSelectionStatus) return;
+        seedSelectionStatus.textContent = String(message || "");
+        seedSelectionStatus.style.color = isError ? "#b91c1c" : "#475569";
+      };
+
+      const setSelectOptions = (selectEl, values) => {
+        if (!selectEl) return;
+        const current = String(selectEl.value || "").trim();
+        const uniqueValues = Array.from(new Set((values || []).map((v) => String(v || "").trim()).filter(Boolean)));
+        selectEl.innerHTML = '<option value="">전체</option>';
+        uniqueValues.forEach((value) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value;
+          selectEl.appendChild(option);
+        });
+        if (current && uniqueValues.includes(current)) {
+          selectEl.value = current;
+        } else {
+          selectEl.value = "";
+        }
+      };
+
+      const similarBridge = () => {
+        return window.mathKichulAdmin && typeof window.mathKichulAdmin === "object"
+          ? window.mathKichulAdmin
+          : null;
+      };
+
+      const initializeSeedFilterOptions = () => {
+        const bridge = similarBridge();
+        if (!bridge || typeof bridge.getDistinctMetaValues !== "function") {
+          setGenerateStatus("PDF 탭 메타데이터 브리지를 찾지 못했습니다.", true);
+          return;
+        }
+        const values = bridge.getDistinctMetaValues();
+        setSelectOptions(seedSchoolInput, values.schools || []);
+        setSelectOptions(seedYearInput, values.years || []);
+        setSelectOptions(seedGradeInput, values.grades || []);
+        setSelectOptions(seedSemesterInput, values.semesters || []);
+        setSelectOptions(seedExamInput, values.exams || []);
+        setSelectOptions(seedSubjectInput, values.subjects || []);
+      };
+
+      const currentSeedCriteria = () => ({
+        school: seedSchoolInput ? seedSchoolInput.value : "",
+        year: seedYearInput ? seedYearInput.value : "",
+        grade: seedGradeInput ? seedGradeInput.value : "",
+        semester: seedSemesterInput ? seedSemesterInput.value : "",
+        exam: seedExamInput ? seedExamInput.value : "",
+        subject: seedSubjectInput ? seedSubjectInput.value : "",
+        pattern: seedPatternInput ? seedPatternInput.value : "",
+        unit_keyword: seedUnitKeywordInput ? seedUnitKeywordInput.value : "",
+      });
+
+      const checkedSeedIdsFromDom = () =>
+        Array.from(
+          seedResultList ? seedResultList.querySelectorAll('.similar-candidate-item input[type="checkbox"]:checked') : []
+        )
+          .map((box) => (box.closest(".similar-candidate-item")?.dataset.candidateId || "").trim())
+          .filter(Boolean);
+
+      const setSeedPreviewEmpty = (message, subtitle = "Seed 문항을 선택하면 미리보기가 표시됩니다.") => {
+        if (seedPreviewSubtitle) {
+          seedPreviewSubtitle.textContent = subtitle;
+        }
+        if (!seedPreviewContent) return;
+        seedPreviewContent.innerHTML = `<p class="manual-preview-empty">${escapeHtml(message || "")}</p>`;
+      };
+
+      const renderSeedPreview = (previewPayload, { heading = "", subtitle = "" } = {}) => {
+        if (!seedPreviewContent) return;
+        const payload = previewPayload || {};
+        const questionHtml = String(payload.question_html || "");
+        const choicesHtml = String(payload.choices_html || "");
+        const answerHtml = String(payload.answer_html || "");
+        const solutionHtml = String(payload.solution_html || "");
+        seedPreviewContent.innerHTML = `
+          <section class="manual-preview-block">
+            <div class="manual-preview-label">문항</div>
+            ${questionHtml || '<p class="manual-preview-empty">문항 본문이 비어 있습니다.</p>'}
+          </section>
+          <section class="manual-preview-block">
+            <div class="manual-preview-label">선택지</div>
+            ${choicesHtml || '<p class="manual-preview-empty">선택지 본문이 비어 있습니다.</p>'}
+          </section>
+          <section class="manual-preview-block">
+            <div class="manual-preview-label">정답</div>
+            ${answerHtml || '<p class="manual-preview-empty">정답 본문이 비어 있습니다.</p>'}
+          </section>
+          <section class="manual-preview-block">
+            <div class="manual-preview-label">해설</div>
+            ${solutionHtml || '<p class="manual-preview-empty">해설 본문이 비어 있습니다.</p>'}
+          </section>
+        `;
+        if (seedPreviewTitle) {
+          seedPreviewTitle.textContent = heading ? `Seed 미리보기 - ${heading}` : "Seed 미리보기";
+        }
+        if (seedPreviewSubtitle) {
+          seedPreviewSubtitle.textContent = subtitle || "Seed 문항 미리보기";
+        }
+        typeset(seedPreviewContent);
+      };
+
+      const updateSeedActiveRowUi = () => {
+        if (!seedResultList) return;
+        const activeId = state.seedActiveId;
+        seedResultList.querySelectorAll(".similar-candidate-item").forEach((node) => {
+          const isActive = String(node.dataset.candidateId || "") === activeId;
+          node.classList.toggle("is-active", isActive);
+          node.setAttribute("aria-selected", isActive ? "true" : "false");
+          node.tabIndex = isActive ? 0 : -1;
+        });
+      };
+
+      const loadSeedPreview = async (problemId, { force = false, subtitlePrefix = "" } = {}) => {
+        const target = String(problemId || "").trim();
+        if (!target) {
+          state.seedActiveId = "";
+          updateSeedActiveRowUi();
+          setSeedPreviewEmpty("Seed 문항을 선택하세요.");
+          return;
+        }
+        state.seedActiveId = target;
+        updateSeedActiveRowUi();
+
+        const cacheKey = target;
+        try {
+          let payload = null;
+          if (!force && state.seedPreviewCache.has(cacheKey)) {
+            payload = state.seedPreviewCache.get(cacheKey);
+          } else {
+            payload = await fetchJson(`/api/problem-preview?id=${encodeURIComponent(target)}`);
+            state.seedPreviewCache.set(cacheKey, payload);
+          }
+          renderSeedPreview(payload, {
+            heading: target,
+            subtitle: subtitlePrefix ? `${subtitlePrefix}: ${target}` : target,
+          });
+        } catch (error) {
+          const message = error && error.message ? error.message : "Seed 미리보기 로드 실패";
+          setSeedPreviewEmpty(message, subtitlePrefix ? `${subtitlePrefix}: ${target}` : target);
+        }
+      };
+
+      const syncSeedCheckedIdsFromDom = () => {
+        state.seedCheckedIds = new Set(checkedSeedIdsFromDom());
+        const activeText = state.seedActiveId ? ` | 미리보기 ${state.seedActiveId}` : "";
+        setSeedSelectionStatus(`선택 Seed ${state.seedCheckedIds.size}개${activeText}`);
+      };
+
+      const seedSearchIds = () =>
+        state.seedSearchRows
+          .map((row) => String((row && row.id) || "").trim())
+          .filter(Boolean);
+
+      const findSeedRowElement = (problemId) => {
+        if (!seedResultList) return null;
+        const target = String(problemId || "").trim();
+        if (!target) return null;
+        return (
+          Array.from(seedResultList.querySelectorAll(".similar-candidate-item")).find(
+            (node) => String(node.dataset.candidateId || "").trim() === target
+          ) || null
+        );
+      };
+
+      const focusSeedRow = (problemId, { scroll = true } = {}) => {
+        const row = findSeedRowElement(problemId);
+        if (!row) return;
+        row.focus();
+        if (scroll) {
+          row.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }
+      };
+
+      const moveSeedActiveBy = async (delta, { focusRow = true } = {}) => {
+        const ids = seedSearchIds();
+        if (!ids.length) return;
+        const step = delta >= 0 ? 1 : -1;
+        const currentIndex = Math.max(0, ids.indexOf(String(state.seedActiveId || "").trim()));
+        const nextIndex = Math.min(ids.length - 1, Math.max(0, currentIndex + step));
+        if (nextIndex === currentIndex) return;
+        const nextId = ids[nextIndex];
+        await loadSeedPreview(nextId, { subtitlePrefix: "검색결과" });
+        if (focusRow) {
+          focusSeedRow(nextId, { scroll: true });
+        }
+      };
+
+      const renderSeedSearchResults = (rows, { preserveChecked = true, preserveActive = true } = {}) => {
+        if (!seedResultList) return;
+        const data = Array.isArray(rows) ? rows : [];
+        state.seedSearchRows = data;
+        const previousChecked = preserveChecked ? new Set(state.seedCheckedIds) : new Set();
+        const previousActive = preserveActive ? String(state.seedActiveId || "").trim() : "";
+        seedResultList.innerHTML = "";
+
+        if (!data.length) {
+          state.seedCheckedIds = new Set();
+          state.seedActiveId = "";
+          seedResultList.innerHTML = '<li class="empty">조건에 맞는 문항이 없습니다.</li>';
+          setSeedSelectionStatus("선택 Seed 0개");
+          setSeedPreviewEmpty("조건에 맞는 Seed 문항이 없습니다.");
+          return;
+        }
+
+        const checkedSet = new Set();
+        const availableIds = new Set(data.map((row) => String(row.id || "").trim()).filter(Boolean));
+        let nextActive = previousActive && availableIds.has(previousActive) ? previousActive : "";
+        if (!nextActive) {
+          nextActive = String(data[0].id || "").trim();
+        }
+
+        data.forEach((row) => {
+          const problemId = String(row.id || "").trim();
+          if (!problemId) return;
+          const checked = previousChecked.has(problemId);
+          if (checked) checkedSet.add(problemId);
+          const unitLabel = String(row.unit || "").trim();
+          const examLabel = `${row.school || ""} ${row.year || ""} G${row.grade || ""} S${row.semester || ""} ${row.exam || ""}${row.subject ? `(${row.subject})` : ""} ${row.source_label || ""}`.trim();
+          const inlineMeta = [examLabel, unitLabel].filter(Boolean).join(" | ");
+          const item = document.createElement("li");
+          item.className = `similar-candidate-item${problemId === nextActive ? " is-active" : ""}`;
+          item.dataset.candidateId = problemId;
+          item.tabIndex = problemId === nextActive ? 0 : -1;
+          item.setAttribute("role", "option");
+          item.setAttribute("aria-selected", problemId === nextActive ? "true" : "false");
+          item.innerHTML = `
+            <div class="similar-candidate-top">
+              <input type="checkbox" aria-label="Seed 선택" ${checked ? "checked" : ""} />
+              <span class="similar-candidate-id">${escapeHtml(problemId)}</span>
+              <span class="similar-seed-inline-meta">${escapeHtml(inlineMeta || "-")}</span>
+            </div>
+          `;
+          const checkbox = item.querySelector('input[type="checkbox"]');
+          if (checkbox) {
+            checkbox.addEventListener("click", (event) => {
+              event.stopPropagation();
+            });
+            checkbox.addEventListener("change", () => {
+              syncSeedCheckedIdsFromDom();
+            });
+          }
+          item.addEventListener("click", () => {
+            item.focus();
+            loadSeedPreview(problemId, { subtitlePrefix: "검색결과" }).catch((error) => {
+              const message = error && error.message ? error.message : "Seed 미리보기 로드 실패";
+              setGenerateStatus(message, true);
+            });
+          });
+          item.addEventListener("keydown", (event) => {
+            if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter" && event.key !== " ") {
+              return;
+            }
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              loadSeedPreview(problemId, { subtitlePrefix: "검색결과" }).catch((error) => {
+                const message = error && error.message ? error.message : "Seed 미리보기 로드 실패";
+                setGenerateStatus(message, true);
+              });
+              return;
+            }
+            event.preventDefault();
+            const delta = event.key === "ArrowDown" ? 1 : -1;
+            moveSeedActiveBy(delta, { focusRow: true }).catch((error) => {
+              const message = error && error.message ? error.message : "Seed 이동 실패";
+              setGenerateStatus(message, true);
+            });
+          });
+          seedResultList.appendChild(item);
+        });
+
+        state.seedCheckedIds = checkedSet;
+        state.seedActiveId = nextActive;
+        updateSeedActiveRowUi();
+        setSeedSelectionStatus(`검색결과 ${data.length}개 | 선택 Seed ${checkedSet.size}개`);
+        if (nextActive) {
+          loadSeedPreview(nextActive, { subtitlePrefix: "검색결과" }).catch((error) => {
+            const message = error && error.message ? error.message : "Seed 미리보기 로드 실패";
+            setGenerateStatus(message, true);
+          });
+        } else {
+          setSeedPreviewEmpty("검색결과에서 Seed 문항을 클릭하세요.");
+        }
+      };
+
+      const loadSeedSearchResults = ({ preserveChecked = true, preserveActive = true } = {}) => {
+        const bridge = similarBridge();
+        if (!bridge || typeof bridge.filterProblemMeta !== "function") {
+          setGenerateStatus("검색 브리지를 찾지 못했습니다. 페이지 새로고침 후 다시 시도하세요.", true);
+          return;
+        }
+        const rows = bridge.filterProblemMeta(currentSeedCriteria());
+        renderSeedSearchResults(rows, { preserveChecked, preserveActive });
+      };
+
+      const setPreviewEmpty = (message) => {
+        if (!previewContent) return;
+        previewContent.innerHTML = `<p class="manual-preview-empty">${escapeHtml(message || "")}</p>`;
+      };
+
+      const renderPreview = (previewPayload, heading = "") => {
+        if (!previewContent) return;
+        const payload = previewPayload || {};
+        const questionHtml = String(payload.question_html || "");
+        const choicesHtml = String(payload.choices_html || "");
+        const answerHtml = String(payload.answer_html || "");
+        const solutionHtml = String(payload.solution_html || "");
+        previewContent.innerHTML = `
+          <section class="manual-preview-block">
+            <div class="manual-preview-label">문항</div>
+            ${questionHtml || '<p class="manual-preview-empty">문항 본문이 비어 있습니다.</p>'}
+          </section>
+          <section class="manual-preview-block">
+            <div class="manual-preview-label">선택지</div>
+            ${choicesHtml || '<p class="manual-preview-empty">선택지 본문이 비어 있습니다.</p>'}
+          </section>
+          <section class="manual-preview-block">
+            <div class="manual-preview-label">정답</div>
+            ${answerHtml || '<p class="manual-preview-empty">정답 본문이 비어 있습니다.</p>'}
+          </section>
+          <section class="manual-preview-block">
+            <div class="manual-preview-label">해설</div>
+            ${solutionHtml || '<p class="manual-preview-empty">해설 본문이 비어 있습니다.</p>'}
+          </section>
+        `;
+        if (previewTitle) {
+          previewTitle.textContent = heading ? `후보 미리보기 - ${heading}` : "후보 미리보기";
+        }
+        typeset(previewContent);
+      };
+
+      const parseErrorMessage = (payload, response) => {
+        if (payload && typeof payload === "object") {
+          if (payload.detail) return String(payload.detail);
+          if (payload.error) return String(payload.error);
+        }
+        return `HTTP ${response.status}`;
+      };
+
+      const fetchJson = async (url, init) => {
+        const response = await fetch(url, init);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(parseErrorMessage(payload, response));
+        }
+        return payload;
+      };
+
+      const normalizeProviderToken = (value) => {
+        const token = String(value || "").trim().toLowerCase();
+        return token || "gemini";
+      };
+
+      const providerDisplayName = (provider) => {
+        const token = normalizeProviderToken(provider);
+        if (token === "groq") return "Groq";
+        if (token === "openai") return "OpenAI";
+        if (token === "gemini") return "Gemini";
+        return token;
+      };
+
+      const keyPlaceholderByProvider = (provider) => {
+        const token = normalizeProviderToken(provider);
+        if (token === "groq") return "gsk_... (저장 시 서버 메모리 보관)";
+        if (token === "openai") return "sk-... (저장 시 서버 메모리 보관)";
+        return "AIza... (저장 시 서버 메모리 보관)";
+      };
+
+      const normalizeModelCatalog = (payloadValue) => {
+        const source = payloadValue && typeof payloadValue === "object" ? payloadValue : {};
+        const rows = {};
+        Object.entries(source).forEach(([provider, models]) => {
+          if (!Array.isArray(models)) return;
+          const clean = models
+            .map((item) => String(item || "").trim())
+            .filter(Boolean);
+          if (clean.length) {
+            rows[normalizeProviderToken(provider)] = clean;
+          }
+        });
+        return rows;
+      };
+
+      const syncProviderOptions = (providers, preferredProvider) => {
+        if (!aiProviderInput) return normalizeProviderToken(preferredProvider);
+        const nextProviders = Array.isArray(providers)
+          ? providers.map((item) => normalizeProviderToken(item)).filter(Boolean)
+          : [];
+        const deduped = Array.from(new Set(nextProviders.length ? nextProviders : ["gemini", "groq", "openai"]));
+        const selected = normalizeProviderToken(preferredProvider || aiProviderInput.value || deduped[0]);
+        aiProviderInput.innerHTML = "";
+        deduped.forEach((provider) => {
+          const option = document.createElement("option");
+          option.value = provider;
+          option.textContent = provider;
+          aiProviderInput.appendChild(option);
+        });
+        aiProviderInput.value = deduped.includes(selected) ? selected : deduped[0];
+        return normalizeProviderToken(aiProviderInput.value);
+      };
+
+      const syncModelOptions = (provider, selectedModel) => {
+        if (!aiModelInput) return "";
+        const providerToken = normalizeProviderToken(provider);
+        const modelRows = state.aiModelsByProvider && typeof state.aiModelsByProvider === "object" ? state.aiModelsByProvider : {};
+        const defaultRows = state.aiDefaultModels && typeof state.aiDefaultModels === "object" ? state.aiDefaultModels : {};
+        const models = Array.isArray(modelRows[providerToken]) ? modelRows[providerToken] : [];
+        const defaultModel = String(defaultRows[providerToken] || models[0] || "").trim();
+        const candidate = String(selectedModel || "").trim();
+        const finalModel = candidate && models.includes(candidate) ? candidate : defaultModel || "";
+        const options = models.length ? models : finalModel ? [finalModel] : [];
+        aiModelInput.innerHTML = "";
+        options.forEach((model) => {
+          const option = document.createElement("option");
+          option.value = model;
+          option.textContent = model;
+          aiModelInput.appendChild(option);
+        });
+        if (!options.length && finalModel) {
+          const option = document.createElement("option");
+          option.value = finalModel;
+          option.textContent = finalModel;
+          aiModelInput.appendChild(option);
+        }
+        if (finalModel) aiModelInput.value = finalModel;
+        return String(aiModelInput.value || "").trim();
+      };
+
+      const refreshApiKeyUi = ({ provider, hasKey, maskedKey }) => {
+        const providerName = providerDisplayName(provider);
+        if (aiKeyLabel) aiKeyLabel.textContent = `${providerName} API Key`;
+        if (aiKeyInput) {
+          aiKeyInput.value = "";
+          const fallback = keyPlaceholderByProvider(provider);
+          aiKeyInput.placeholder = hasKey
+            ? `${maskedKey || "API 키 저장됨"} (새 키를 입력하면 교체됩니다)`
+            : fallback;
+        }
+      };
+
+      const applyAiConfig = (payload) => {
+        const data = payload && typeof payload === "object" ? payload : {};
+        const providers = Array.isArray(data.providers) ? data.providers : ["gemini", "groq", "openai"];
+        const modelsByProvider = normalizeModelCatalog(data.models_by_provider);
+        const defaultModels =
+          data.default_models && typeof data.default_models === "object"
+            ? Object.fromEntries(
+                Object.entries(data.default_models).map(([provider, model]) => [
+                  normalizeProviderToken(provider),
+                  String(model || "").trim(),
+                ])
+              )
+            : {};
+        state.aiProviders = providers.map((item) => normalizeProviderToken(item)).filter(Boolean);
+        state.aiModelsByProvider = modelsByProvider;
+        state.aiDefaultModels = defaultModels;
+
+        const provider = syncProviderOptions(state.aiProviders, data.provider || "gemini");
+        const model = syncModelOptions(provider, String(data.model || "").trim());
+        const hasKey = Boolean(data.has_api_key);
+        const maskedKey = String(data.api_key_masked || "").trim();
+        const updatedAt = String(data.updated_at || "").trim();
+
+        state.aiHasKey = hasKey;
+        state.aiConfigLoaded = true;
+        state.aiProviderDirty = false;
+        refreshApiKeyUi({ provider, hasKey, maskedKey });
+
+        const stamp = updatedAt ? ` | updated ${updatedAt}` : "";
+        if (hasKey) {
+          setAiStatus(`${providerDisplayName(provider)} API 키가 메모리에 설정되어 있습니다.${stamp}`);
+        } else {
+          setAiStatus(`${providerDisplayName(provider)} API 키가 아직 설정되지 않았습니다.${stamp}`);
+        }
+
+        if (aiProviderInput) aiProviderInput.value = provider;
+        if (aiModelInput) aiModelInput.value = model;
+      };
+
+      const onAiProviderChanged = () => {
+        const provider = normalizeProviderToken(aiProviderInput ? aiProviderInput.value : "gemini");
+        syncModelOptions(provider, "");
+        refreshApiKeyUi({ provider, hasKey: false, maskedKey: "" });
+        state.aiHasKey = false;
+        state.aiProviderDirty = true;
+        setAiStatus(`${providerDisplayName(provider)} 선택됨. API 설정 저장 후 생성을 실행하세요.`);
+      };
+
+      const loadAiConfig = async () => {
+        setAiStatus("AI 설정을 불러오는 중입니다...");
+        const payload = await fetchJson("/api/ai-config");
+        applyAiConfig(payload);
+      };
+
+      const saveAiConfig = async ({ clearApiKey = false } = {}) => {
+        const provider = normalizeProviderToken(aiProviderInput ? aiProviderInput.value : "gemini");
+        const defaultRows = state.aiDefaultModels && typeof state.aiDefaultModels === "object" ? state.aiDefaultModels : {};
+        const model =
+          String(aiModelInput ? aiModelInput.value : "").trim() ||
+          String(defaultRows[provider] || "").trim() ||
+          "gpt-5-mini";
+        const apiKey = aiKeyInput ? aiKeyInput.value : "";
+        const body = {
+          provider,
+          model,
+          clear_api_key: Boolean(clearApiKey),
+        };
+        if (!clearApiKey && apiKey.trim()) {
+          body.api_key = apiKey.trim();
+        }
+        setAiStatus(clearApiKey ? "API 키를 삭제하는 중입니다..." : "AI 설정을 저장하는 중입니다...");
+        const payload = await fetchJson("/api/ai-config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        applyAiConfig(payload);
+      };
+
+      const runGenerationBySeedIds = async (
+        seedIds,
+        {
+          statusPrefix = "생성",
+          forcedBatchId = "",
+        } = {}
+      ) => {
+        if (!state.aiHasKey) {
+          setGenerateStatus("API 키를 먼저 저장하세요.", true);
+          return { ok: false };
+        }
+        if (state.aiProviderDirty) {
+          setGenerateStatus("Provider 변경 후 아직 저장되지 않았습니다. API 설정 저장을 먼저 실행하세요.", true);
+          return { ok: false };
+        }
+        const targets = Array.isArray(seedIds) ? seedIds.map((id) => String(id || "").trim()).filter(Boolean) : [];
+        if (!targets.length) {
+          setGenerateStatus(`${statusPrefix}할 Seed가 없습니다.`, true);
+          return { ok: false };
+        }
+        const variantsPerSeed = Number(generateVariantsInput ? generateVariantsInput.value : 1);
+        const requestedBatchId = String(forcedBatchId || (generateBatchIdInput ? generateBatchIdInput.value.trim() : "")).trim();
+        const similarityType = generateTypeInput ? generateTypeInput.value : "parameter_change";
+        const model = aiModelInput ? aiModelInput.value.trim() : "";
+        const chunkSize = 4;
+        const chunks = [];
+        for (let index = 0; index < targets.length; index += chunkSize) {
+          chunks.push(targets.slice(index, index + chunkSize));
+        }
+
+        let generatedBatchId = requestedBatchId;
+        let completedSeedCount = 0;
+        let totalCreated = 0;
+        let totalFailed = 0;
+        let totalSkipped = 0;
+        let fatalMessage = "";
+
+        for (let index = 0; index < chunks.length; index += 1) {
+          const chunkSeedIds = chunks[index];
+          const chunkStart = completedSeedCount + 1;
+          const chunkEnd = completedSeedCount + chunkSeedIds.length;
+          setGenerateStatus(
+            `${statusPrefix} 중... ${chunkStart}-${chunkEnd}/${targets.length} seed 처리 중 (변형 ${variantsPerSeed}개/seed)`
+          );
+
+          let payload;
+          try {
+            payload = await fetchJson("/api/similar-generate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                seed_ids: chunkSeedIds,
+                batch_id: generatedBatchId,
+                variants_per_seed: Number.isFinite(variantsPerSeed) ? variantsPerSeed : 1,
+                similarity_type: similarityType,
+                model,
+              }),
+            });
+          } catch (error) {
+            fatalMessage = error && error.message ? String(error.message) : "요청 실패";
+            break;
+          }
+
+          const summary = payload && payload.summary ? payload.summary : {};
+          const created = Number(summary.created || 0);
+          const failed = Number(summary.failed || 0);
+          const skipped = Number(summary.skipped || 0);
+          totalCreated += Number.isFinite(created) ? created : 0;
+          totalFailed += Number.isFinite(failed) ? failed : 0;
+          totalSkipped += Number.isFinite(skipped) ? skipped : 0;
+          completedSeedCount += chunkSeedIds.length;
+
+          const returnedBatchId = String(payload.batch_id || "").trim();
+          if (returnedBatchId) {
+            generatedBatchId = returnedBatchId;
+          }
+
+          setGenerateStatus(
+            `${statusPrefix} 진행: ${completedSeedCount}/${targets.length} seed 완료 | created ${totalCreated}, failed ${totalFailed}, skipped ${totalSkipped}`
+          );
+        }
+
+        await loadBatches({ preserveSelection: true });
+        if (generatedBatchId && batchSelect) {
+          batchSelect.value = generatedBatchId;
+        }
+        await loadCandidates({ preserveSelection: false });
+
+        if (fatalMessage) {
+          setGenerateStatus(
+            `${statusPrefix} 중단: ${completedSeedCount}/${targets.length} seed 처리 완료 | created ${totalCreated}, failed ${totalFailed}, skipped ${totalSkipped} | 오류: ${fatalMessage}`,
+            true
+          );
+          return {
+            ok: false,
+            batchId: generatedBatchId,
+            completedSeedCount,
+            totalCreated,
+            totalFailed,
+            totalSkipped,
+            fatalMessage,
+          };
+        }
+
+        setGenerateStatus(
+          `${statusPrefix} 완료: batch ${generatedBatchId || "(none)"} | created ${totalCreated}, failed ${totalFailed}, skipped ${totalSkipped}`
+        );
+        return {
+          ok: true,
+          batchId: generatedBatchId,
+          completedSeedCount,
+          totalCreated,
+          totalFailed,
+          totalSkipped,
+          fatalMessage: "",
+        };
+      };
+
+      const runAutoGeneration = async () => {
+        syncSeedCheckedIdsFromDom();
+        const seedIds = Array.from(state.seedCheckedIds);
+        if (!seedIds.length) {
+          setGenerateStatus("검색결과에서 Seed 문항을 체크하세요.", true);
+          return;
+        }
+        await runGenerationBySeedIds(seedIds, { statusPrefix: "생성" });
+      };
+
+      const collectFailedSeedIdsFromCurrentBatch = () => {
+        const failedSeedSet = new Set();
+        (Array.isArray(state.candidates) ? state.candidates : []).forEach((row) => {
+          const seedId = String((row && row.derived_from) || "").trim();
+          if (!seedId) return;
+          const hasDraft = Boolean(row && row.has_draft);
+          const autoFailed = Boolean(row && row.auto_failed);
+          if (hasDraft || autoFailed) {
+            failedSeedSet.add(seedId);
+          }
+        });
+        return Array.from(failedSeedSet);
+      };
+
+      const runRetryFailedSeeds = async () => {
+        const batchId = String(state.batchId || (batchSelect ? batchSelect.value : "") || "").trim();
+        if (!batchId) {
+          setGenerateStatus("재시도할 batch를 먼저 선택하세요.", true);
+          return;
+        }
+        if (!Array.isArray(state.candidates) || !state.candidates.length) {
+          await loadCandidates({ preserveSelection: true });
+        }
+        const failedSeedIds = collectFailedSeedIdsFromCurrentBatch();
+        if (!failedSeedIds.length) {
+          setGenerateStatus(`재시도 대상 실패 seed가 없습니다. (batch ${batchId})`);
+          return;
+        }
+        await runGenerationBySeedIds(failedSeedIds, {
+          statusPrefix: "실패 seed 재시도",
+          forcedBatchId: batchId,
+        });
+      };
+
+      const getCurrentEditorSections = () => ({
+        q: qInput ? qInput.value : "",
+        choices: choicesInput ? choicesInput.value : "",
+        answer: answerInput ? answerInput.value : "",
+        solution: solutionInput ? solutionInput.value : "",
+      });
+
+      const setEditorSections = (sections) => {
+        const data = sections || {};
+        if (qInput) qInput.value = String(data.q || "");
+        if (choicesInput) choicesInput.value = String(data.choices || "");
+        if (answerInput) answerInput.value = String(data.answer || "");
+        if (solutionInput) solutionInput.value = String(data.solution || "");
+      };
+
+      const clearEditor = () => {
+        setEditorSections({ q: "", choices: "", answer: "", solution: "" });
+        if (reviewStatusInput) reviewStatusInput.value = "pending";
+        if (reviewNoteInput) reviewNoteInput.value = "";
+      };
+
+      const getCheckedCandidateIds = () =>
+        Array.from(candidateList ? candidateList.querySelectorAll('.similar-candidate-item input[type="checkbox"]:checked') : [])
+          .map((box) => (box.closest(".similar-candidate-item")?.dataset.candidateId || "").trim())
+          .filter(Boolean);
+
+      const syncCheckedStateFromDom = () => {
+        state.checkedIds = new Set(getCheckedCandidateIds());
+      };
+
+      const candidateIds = () =>
+        (Array.isArray(state.candidates) ? state.candidates : [])
+          .map((row) => String((row && row.candidate_id) || "").trim())
+          .filter(Boolean);
+
+      const findCandidateRowElement = (candidateId) => {
+        if (!candidateList) return null;
+        const target = String(candidateId || "").trim();
+        if (!target) return null;
+        return (
+          Array.from(candidateList.querySelectorAll(".similar-candidate-item")).find(
+            (node) => String(node.dataset.candidateId || "").trim() === target
+          ) || null
+        );
+      };
+
+      const focusCandidateRow = (candidateId, { scroll = true } = {}) => {
+        const row = findCandidateRowElement(candidateId);
+        if (!row) return;
+        row.focus();
+        if (scroll) {
+          row.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }
+      };
+
+      const moveActiveCandidateBy = async (delta, { focusRow = true } = {}) => {
+        const ids = candidateIds();
+        if (!ids.length) return;
+        const step = delta >= 0 ? 1 : -1;
+        const currentIndex = Math.max(0, ids.indexOf(String(state.activeCandidateId || "").trim()));
+        const nextIndex = Math.min(ids.length - 1, Math.max(0, currentIndex + step));
+        if (nextIndex === currentIndex) return;
+        const nextId = ids[nextIndex];
+        await selectCandidate(nextId);
+        if (focusRow) {
+          focusCandidateRow(nextId, { scroll: true });
+        }
+      };
+
+      const statusChipClass = (status) => {
+        const token = String(status || "").trim().toLowerCase();
+        if (token === "approved") return "approved";
+        if (token === "rejected") return "rejected";
+        if (token === "promoted") return "promoted";
+        return "pending";
+      };
+
+      const renderCandidateList = () => {
+        if (!candidateList) return;
+        candidateList.innerHTML = "";
+        if (!state.candidates.length) {
+          candidateList.innerHTML = '<li class="empty">후보 문항이 없습니다.</li>';
+          return;
+        }
+
+        const activeId = state.activeCandidateId;
+        state.candidates.forEach((row) => {
+          const candidateId = String(row.candidate_id || "").trim();
+          if (!candidateId) return;
+          const reviewStatus = String(row.review_status || "pending").trim().toLowerCase();
+          const derivedFrom = String(row.derived_from || "").trim();
+          const promotedTo = String(row.promoted_to || "").trim();
+          const validation = row.validation && typeof row.validation === "object" ? row.validation : {};
+          const validationOk = validation.ok;
+          let validationText = "검증 미실행";
+          if (validationOk === true) {
+            validationText = "검증 통과";
+          } else if (validationOk === false) {
+            validationText = `검증 실패(${Number(validation.error_count || 0)})`;
+          }
+          const similarityRatio =
+            typeof validation.similarity_ratio === "number"
+              ? `유사도 ${(validation.similarity_ratio * 100).toFixed(1)}%`
+              : "";
+          const isActive = candidateId === activeId;
+          const checked = state.checkedIds.has(candidateId);
+          const item = document.createElement("li");
+          item.className = `similar-candidate-item${isActive ? " is-active" : ""}`;
+          item.dataset.candidateId = candidateId;
+          item.tabIndex = isActive ? 0 : -1;
+          item.setAttribute("role", "option");
+          item.setAttribute("aria-selected", isActive ? "true" : "false");
+          item.innerHTML = `
+            <div class="similar-candidate-top">
+              <input type="checkbox" aria-label="선택" ${checked ? "checked" : ""} />
+              <span class="similar-candidate-id">${escapeHtml(candidateId)}</span>
+              <button class="btn secondary similar-candidate-edit" type="button" aria-label="후보 메타 수정">수정</button>
+            </div>
+            <div class="similar-candidate-meta">source: ${escapeHtml(derivedFrom || "-")}</div>
+            <div class="similar-candidate-meta">${escapeHtml(promotedTo ? `promoted: ${promotedTo}` : "")}</div>
+            <div class="similar-chip-row">
+              <span class="similar-chip ${statusChipClass(reviewStatus)}">${escapeHtml(reviewStatus || "pending")}</span>
+              <span class="similar-chip">${escapeHtml(validationText)}</span>
+              ${similarityRatio ? `<span class="similar-chip">${escapeHtml(similarityRatio)}</span>` : ""}
+            </div>
+          `;
+          const checkbox = item.querySelector('input[type="checkbox"]');
+          if (checkbox) {
+            checkbox.addEventListener("click", (event) => {
+              event.stopPropagation();
+            });
+            checkbox.addEventListener("change", () => {
+              syncCheckedStateFromDom();
+            });
+          }
+          const editButton = item.querySelector(".similar-candidate-edit");
+          if (editButton) {
+            editButton.addEventListener("keydown", (event) => {
+              event.stopPropagation();
+            });
+            editButton.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              openGeneratedMetaEditor(candidateId);
+            });
+          }
+          item.addEventListener("click", () => {
+            item.focus();
+            selectCandidate(candidateId);
+          });
+          item.addEventListener("keydown", (event) => {
+            if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter" && event.key !== " ") {
+              return;
+            }
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              selectCandidate(candidateId);
+              return;
+            }
+            event.preventDefault();
+            const delta = event.key === "ArrowDown" ? 1 : -1;
+            moveActiveCandidateBy(delta, { focusRow: true }).catch((error) => {
+              const message = error && error.message ? error.message : "후보 이동 실패";
+              setEditorStatus(message, true);
+            });
+          });
+          candidateList.appendChild(item);
+        });
+      };
+
+      const updateBatchSummary = () => {
+        if (!batchSummary) return;
+        if (!state.batchId) {
+          batchSummary.textContent = "배치를 선택하면 후보 목록을 불러옵니다.";
+          return;
+        }
+        const info = state.batchInfoById.get(state.batchId) || {};
+        const candidateCount = Number(info.candidate_count || state.candidates.length || 0);
+        const validation = info.validation && typeof info.validation === "object" ? info.validation : {};
+        const total = Number(validation.total || 0);
+        const ok = Number(validation.ok || 0);
+        const failed = Number(validation.failed || 0);
+        const validatedText = total > 0 ? ` | 검증 ${ok}/${total} (실패 ${failed})` : "";
+        batchSummary.textContent = `Batch ${state.batchId} | 후보 ${candidateCount}${validatedText}`;
+      };
+
+      const setActiveCandidateUi = () => {
+        const activeId = state.activeCandidateId;
+        if (!candidateList) return;
+        candidateList.querySelectorAll(".similar-candidate-item").forEach((node) => {
+          const isActive = (node.dataset.candidateId || "") === activeId;
+          node.classList.toggle("is-active", isActive);
+          node.setAttribute("aria-selected", isActive ? "true" : "false");
+          node.tabIndex = isActive ? 0 : -1;
+        });
+      };
+
+      const refreshPreviewForActiveCandidate = async ({ force = false, draft = false } = {}) => {
+        const batchId = state.batchId;
+        const candidateId = state.activeCandidateId;
+        if (!batchId || !candidateId) {
+          setPreviewEmpty("후보를 선택하세요.");
+          return;
+        }
+
+        const cacheKey = `${batchId}/${candidateId}`;
+        try {
+          if (!draft && !force && state.previewCache.has(cacheKey)) {
+            renderPreview(state.previewCache.get(cacheKey), candidateId);
+            return;
+          }
+          if (draft) {
+            const sections = getCurrentEditorSections();
+            const payload = await fetchJson("/api/similar-preview-render", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                batch_id: batchId,
+                candidate_id: candidateId,
+                q: sections.q,
+                choices: sections.choices,
+                answer: sections.answer,
+                solution: sections.solution,
+              }),
+            });
+            const preview = payload && payload.preview ? payload.preview : null;
+            if (preview) renderPreview(preview, `${candidateId} (편집본)`);
+            return;
+          }
+          const payload = await fetchJson(
+            `/api/similar-preview?batch_id=${encodeURIComponent(batchId)}&candidate_id=${encodeURIComponent(candidateId)}`
+          );
+          state.previewCache.set(cacheKey, payload);
+          renderPreview(payload, candidateId);
+        } catch (error) {
+          const message = error && error.message ? error.message : "미리보기 로드 실패";
+          setPreviewEmpty(message);
+        }
+      };
+
+      const loadCandidateContent = async (candidateId, { force = false } = {}) => {
+        const batchId = state.batchId;
+        if (!batchId || !candidateId) return null;
+        const cacheKey = `${batchId}/${candidateId}`;
+        if (!force && state.contentCache.has(cacheKey)) {
+          return state.contentCache.get(cacheKey);
+        }
+        const payload = await fetchJson(
+          `/api/similar-content?batch_id=${encodeURIComponent(batchId)}&candidate_id=${encodeURIComponent(candidateId)}`
+        );
+        state.contentCache.set(cacheKey, payload);
+        return payload;
+      };
+
+      const applyCandidateContentToEditor = (payload, candidateId) => {
+        if (!payload) return;
+        const derivedFrom = String(payload.derived_from || "").trim();
+        setEditorSections({
+          q: payload.q,
+          choices: payload.choices,
+          answer: payload.answer,
+          solution: payload.solution,
+        });
+        if (reviewStatusInput) {
+          const status = String(payload.review_status || "pending").trim().toLowerCase();
+          reviewStatusInput.value = status || "pending";
+        }
+        if (reviewNoteInput) reviewNoteInput.value = String(payload.review_note || "");
+        if (previewSubtitle) {
+          previewSubtitle.textContent = derivedFrom
+            ? `${candidateId} | source: ${derivedFrom}`
+            : `${candidateId}`;
+        }
+        if (derivedFrom) {
+          loadSeedPreview(derivedFrom, { subtitlePrefix: "후보 원본" }).catch((error) => {
+            const message = error && error.message ? error.message : "Seed 미리보기 로드 실패";
+            setGenerateStatus(message, true);
+          });
+        }
+      };
+
+      const selectCandidate = async (candidateId, { force = false } = {}) => {
+        const target = String(candidateId || "").trim();
+        if (!target || !state.batchId) return;
+        state.activeCandidateId = target;
+        setActiveCandidateUi();
+        setEditorStatus("후보 데이터를 불러오는 중입니다...");
+        const token = ++state.requestToken;
+        try {
+          const payload = await loadCandidateContent(target, { force });
+          if (token !== state.requestToken) return;
+          applyCandidateContentToEditor(payload, target);
+          await refreshPreviewForActiveCandidate({ force });
+          if (token !== state.requestToken) return;
+          setEditorStatus("불러오기 완료");
+        } catch (error) {
+          if (token !== state.requestToken) return;
+          const message = error && error.message ? error.message : "후보 로드 실패";
+          setEditorStatus(message, true);
+        }
+      };
+
+      const loadCandidates = async ({ preserveSelection = true } = {}) => {
+        const batchId = String(batchSelect.value || "").trim();
+        state.batchId = batchId;
+        state.contentCache.clear();
+        state.previewCache.clear();
+        if (!batchId) {
+          state.candidates = [];
+          state.activeCandidateId = "";
+          renderCandidateList();
+          updateBatchSummary();
+          clearEditor();
+          setPreviewEmpty("배치를 선택하세요.");
+          return;
+        }
+
+        const previousActiveId = preserveSelection ? state.activeCandidateId : "";
+        const previousCheckedIds = preserveSelection ? new Set(state.checkedIds) : new Set();
+        setEditorStatus("후보 목록을 불러오는 중입니다...");
+        try {
+          const payload = await fetchJson(`/api/similar-candidates?batch_id=${encodeURIComponent(batchId)}`);
+          state.candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+          const validIds = new Set(state.candidates.map((row) => String(row.candidate_id || "").trim()).filter(Boolean));
+          state.checkedIds = new Set(Array.from(previousCheckedIds).filter((id) => validIds.has(id)));
+          renderCandidateList();
+          updateBatchSummary();
+
+          const nextActiveId =
+            (previousActiveId && validIds.has(previousActiveId) ? previousActiveId : "") ||
+            (state.candidates[0] ? String(state.candidates[0].candidate_id || "") : "");
+          if (nextActiveId) {
+            await selectCandidate(nextActiveId, { force: true });
+          } else {
+            state.activeCandidateId = "";
+            clearEditor();
+            setPreviewEmpty("후보 문항이 없습니다.");
+            setEditorStatus("후보 문항이 없습니다.");
+          }
+        } catch (error) {
+          const message = error && error.message ? error.message : "후보 목록 로드 실패";
+          setEditorStatus(message, true);
+          state.candidates = [];
+          renderCandidateList();
+          updateBatchSummary();
+        }
+      };
+
+      const loadBatches = async ({ preserveSelection = true } = {}) => {
+        const previous = preserveSelection ? String(batchSelect.value || "").trim() : "";
+        setEditorStatus("배치 목록을 불러오는 중입니다...");
+        try {
+          const payload = await fetchJson("/api/similar-batches");
+          const rows = Array.isArray(payload.batches) ? payload.batches : [];
+          state.batches = rows;
+          state.batchInfoById = new Map(rows.map((row) => [String(row.batch_id || "").trim(), row]));
+
+          batchSelect.innerHTML = "";
+          const placeholder = document.createElement("option");
+          placeholder.value = "";
+          placeholder.textContent = rows.length ? "배치를 선택하세요" : "배치 없음";
+          batchSelect.appendChild(placeholder);
+          rows.forEach((row) => {
+            const batchId = String(row.batch_id || "").trim();
+            if (!batchId) return;
+            const option = document.createElement("option");
+            option.value = batchId;
+            const count = Number(row.candidate_count || 0);
+            option.textContent = `${batchId} (${count})`;
+            batchSelect.appendChild(option);
+          });
+
+          if (previous && state.batchInfoById.has(previous)) {
+            batchSelect.value = previous;
+          } else if (!batchSelect.value && rows[0] && rows[0].batch_id) {
+            batchSelect.value = String(rows[0].batch_id);
+          }
+          state.batchId = String(batchSelect.value || "").trim();
+          updateBatchSummary();
+          setEditorStatus("배치 목록 로드 완료");
+        } catch (error) {
+          const message = error && error.message ? error.message : "배치 목록 로드 실패";
+          setEditorStatus(message, true);
+        }
+      };
+
+      const withButtonBusy = async (button, action) => {
+        if (!button) return;
+        const oldDisabled = button.disabled;
+        button.disabled = true;
+        try {
+          await action();
+        } finally {
+          button.disabled = oldDisabled;
+        }
+      };
+
+      const updateRowReviewState = (candidateId, status, note) => {
+        const id = String(candidateId || "").trim();
+        const row = state.candidates.find((item) => String(item.candidate_id || "").trim() === id);
+        if (!row) return;
+        row.review_status = String(status || "pending").trim().toLowerCase();
+        row.review_note = String(note || "");
+        renderCandidateList();
+        setActiveCandidateUi();
+      };
+
+      const validateCandidates = async (candidateIds) => {
+        if (!state.batchId) {
+          setEditorStatus("먼저 배치를 선택하세요.", true);
+          return;
+        }
+        const maxSimilarity = Number(maxSimilarityInput ? maxSimilarityInput.value : 0.92);
+        const ids = Array.isArray(candidateIds) ? candidateIds : [];
+        setEditorStatus("검증을 실행 중입니다...");
+        const payload = await fetchJson("/api/similar-validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            batch_id: state.batchId,
+            candidate_ids: ids.join(" "),
+            max_similarity: Number.isFinite(maxSimilarity) ? maxSimilarity : 0.92,
+          }),
+        });
+        const summary = payload && payload.summary ? payload.summary : {};
+        setEditorStatus(`검증 완료: total ${summary.total || 0}, ok ${summary.ok || 0}, failed ${summary.failed || 0}`);
+        await loadBatches({ preserveSelection: true });
+        await loadCandidates({ preserveSelection: true });
+      };
+
+      const promoteCandidates = async (candidateIds) => {
+        if (!state.batchId) {
+          setEditorStatus("먼저 배치를 선택하세요.", true);
+          return;
+        }
+        const ids = Array.isArray(candidateIds) ? candidateIds : [];
+        if (!ids.length) {
+          setEditorStatus("승격할 후보를 선택하세요.", true);
+          return;
+        }
+        setEditorStatus("승격을 실행 중입니다...");
+        const payload = await fetchJson("/api/similar-promote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            batch_id: state.batchId,
+            candidate_ids: ids.join(" "),
+          }),
+        });
+        const promotedCount = Array.isArray(payload.promoted) ? payload.promoted.length : 0;
+        const skippedCount = Array.isArray(payload.skipped) ? payload.skipped.length : 0;
+        setEditorStatus(`승격 완료: promoted ${promotedCount}, skipped ${skippedCount}`);
+        await loadCandidates({ preserveSelection: true });
+      };
+
+      const openGeneratedMetaEditor = (candidateId) => {
+        const bridge = similarBridge();
+        if (!bridge || typeof bridge.openMetaEditor !== "function" || typeof bridge.buildGeneratedProblemId !== "function") {
+          setEditorStatus("메타 수정 브리지를 찾지 못했습니다.", true);
+          return false;
+        }
+
+        const batchId = String(state.batchId || "").trim();
+        const targetId = String(candidateId || "").trim();
+        if (!batchId || !targetId) {
+          setEditorStatus("수정할 후보를 찾지 못했습니다.", true);
+          return false;
+        }
+
+        const generatedProblemId = bridge.buildGeneratedProblemId(batchId, targetId);
+        if (!generatedProblemId) {
+          setEditorStatus("메타 수정 대상 ID 생성에 실패했습니다.", true);
+          return false;
+        }
+
+        bridge.openMetaEditor(generatedProblemId);
+        return true;
+      };
+
+      const ensureCheckedSelection = () => {
+        syncCheckedStateFromDom();
+        const ids = Array.from(state.checkedIds);
+        if (ids.length) return ids;
+        if (state.activeCandidateId) return [state.activeCandidateId];
+        return [];
+      };
+
+      document.addEventListener("problem-meta-row-deleted", async (event) => {
+        const detail = event && event.detail ? event.detail : {};
+        const rootKind = String(detail.rootKind || "").trim().toLowerCase();
+        if (rootKind !== "generated") return;
+
+        const deletedBatchId = String(detail.batchId || "").trim();
+        const deletedCandidateId = String(detail.candidateId || "").trim();
+        if (deletedCandidateId) {
+          state.checkedIds.delete(deletedCandidateId);
+          const cacheKey = `${state.batchId}/${deletedCandidateId}`;
+          state.contentCache.delete(cacheKey);
+          state.previewCache.delete(cacheKey);
+        }
+        if (deletedBatchId && state.batchId && deletedBatchId !== state.batchId) return;
+
+        try {
+          await loadBatches({ preserveSelection: true });
+          await loadCandidates({ preserveSelection: true });
+        } catch (error) {
+          const message = error && error.message ? error.message : "후보 목록 갱신 실패";
+          setEditorStatus(message, true);
+        }
+      });
+
+      const bindEditorDirtyState = () => {
+        [qInput, choicesInput, answerInput, solutionInput].filter(Boolean).forEach((inputEl) => {
+          inputEl.addEventListener("input", () => {
+            setEditorStatus("미저장 변경이 있습니다.");
+          });
+        });
+        if (reviewNoteInput) {
+          reviewNoteInput.addEventListener("input", () => {
+            setEditorStatus("검수 노트 변경이 있습니다.");
+          });
+        }
+      };
+
+      if (batchRefreshBtn) {
+        batchRefreshBtn.addEventListener("click", async () => {
+          await withButtonBusy(batchRefreshBtn, async () => {
+            await loadBatches({ preserveSelection: true });
+          });
+        });
+      }
+
+      if (batchLoadBtn) {
+        batchLoadBtn.addEventListener("click", async () => {
+          await withButtonBusy(batchLoadBtn, async () => {
+            await loadCandidates({ preserveSelection: false });
+          });
+        });
+      }
+
+      if (batchSelect) {
+        batchSelect.addEventListener("change", async () => {
+          await loadCandidates({ preserveSelection: false });
+        });
+      }
+
+      if (checkAllBtn) {
+        checkAllBtn.addEventListener("click", () => {
+          candidateList
+            ?.querySelectorAll('.similar-candidate-item input[type="checkbox"]')
+            .forEach((box) => {
+              box.checked = true;
+            });
+          syncCheckedStateFromDom();
+        });
+      }
+
+      if (uncheckAllBtn) {
+        uncheckAllBtn.addEventListener("click", () => {
+          candidateList
+            ?.querySelectorAll('.similar-candidate-item input[type="checkbox"]')
+            .forEach((box) => {
+              box.checked = false;
+            });
+          syncCheckedStateFromDom();
+        });
+      }
+
+      if (contentReloadBtn) {
+        contentReloadBtn.addEventListener("click", async () => {
+          if (!state.activeCandidateId) {
+            setEditorStatus("후보를 먼저 선택하세요.", true);
+            return;
+          }
+          await withButtonBusy(contentReloadBtn, async () => {
+            await selectCandidate(state.activeCandidateId, { force: true });
+          });
+        });
+      }
+
+      if (previewRenderBtn) {
+        previewRenderBtn.addEventListener("click", async () => {
+          if (!state.activeCandidateId) {
+            setEditorStatus("후보를 먼저 선택하세요.", true);
+            return;
+          }
+          await withButtonBusy(previewRenderBtn, async () => {
+            setEditorStatus("편집 미리보기를 렌더링 중입니다...");
+            await refreshPreviewForActiveCandidate({ draft: true, force: true });
+            setEditorStatus("편집 미리보기 렌더링 완료");
+          });
+        });
+      }
+
+      if (contentSaveBtn) {
+        contentSaveBtn.addEventListener("click", async () => {
+          if (!state.batchId || !state.activeCandidateId) {
+            setEditorStatus("후보를 먼저 선택하세요.", true);
+            return;
+          }
+          await withButtonBusy(contentSaveBtn, async () => {
+            setEditorStatus("problem.md 저장 중입니다...");
+            const sections = getCurrentEditorSections();
+            const payload = await fetchJson("/api/similar-content", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                batch_id: state.batchId,
+                candidate_id: state.activeCandidateId,
+                q: sections.q,
+                choices: sections.choices,
+                answer: sections.answer,
+                solution: sections.solution,
+              }),
+            });
+            const cacheKey = `${state.batchId}/${state.activeCandidateId}`;
+            state.contentCache.set(cacheKey, {
+              batch_id: state.batchId,
+              candidate_id: state.activeCandidateId,
+              q: sections.q,
+              choices: sections.choices,
+              answer: sections.answer,
+              solution: sections.solution,
+              review_status: reviewStatusInput ? reviewStatusInput.value : "pending",
+              review_note: reviewNoteInput ? reviewNoteInput.value : "",
+            });
+            if (payload && payload.preview) {
+              state.previewCache.set(cacheKey, payload.preview);
+              renderPreview(payload.preview, state.activeCandidateId);
+            } else {
+              state.previewCache.delete(cacheKey);
+              await refreshPreviewForActiveCandidate({ force: true });
+            }
+            setEditorStatus("problem.md 저장 완료");
+          });
+        });
+      }
+
+      if (reviewSaveBtn) {
+        reviewSaveBtn.addEventListener("click", async () => {
+          if (!state.batchId || !state.activeCandidateId) {
+            setEditorStatus("후보를 먼저 선택하세요.", true);
+            return;
+          }
+          await withButtonBusy(reviewSaveBtn, async () => {
+            const status = reviewStatusInput ? reviewStatusInput.value : "pending";
+            const note = reviewNoteInput ? reviewNoteInput.value : "";
+            setEditorStatus("검수 상태 저장 중입니다...");
+            await fetchJson("/api/similar-review", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                batch_id: state.batchId,
+                candidate_id: state.activeCandidateId,
+                review_status: status,
+                review_note: note,
+              }),
+            });
+            updateRowReviewState(state.activeCandidateId, status, note);
+            setEditorStatus("검수 상태 저장 완료");
+          });
+        });
+      }
+
+      if (validateSelectedBtn) {
+        validateSelectedBtn.addEventListener("click", async () => {
+          const ids = ensureCheckedSelection();
+          if (!ids.length) {
+            setEditorStatus("검증할 후보를 선택하세요.", true);
+            return;
+          }
+          await withButtonBusy(validateSelectedBtn, async () => {
+            await validateCandidates(ids);
+          });
+        });
+      }
+
+      if (validateAllBtn) {
+        validateAllBtn.addEventListener("click", async () => {
+          await withButtonBusy(validateAllBtn, async () => {
+            await validateCandidates([]);
+          });
+        });
+      }
+
+      if (promoteSelectedBtn && !promoteSelectedBtn.disabled) {
+        promoteSelectedBtn.addEventListener("click", async () => {
+          const ids = ensureCheckedSelection();
+          if (!ids.length) {
+            setEditorStatus("승격할 후보를 선택하세요.", true);
+            return;
+          }
+          await withButtonBusy(promoteSelectedBtn, async () => {
+            await promoteCandidates(ids);
+          });
+        });
+      }
+
+      if (aiProviderInput) {
+        aiProviderInput.addEventListener("change", () => {
+          onAiProviderChanged();
+        });
+      }
+
+      if (aiSaveBtn) {
+        aiSaveBtn.addEventListener("click", async () => {
+          await withButtonBusy(aiSaveBtn, async () => {
+            await saveAiConfig({ clearApiKey: false });
+          });
+        });
+      }
+
+      if (aiClearKeyBtn) {
+        aiClearKeyBtn.addEventListener("click", async () => {
+          const agreed = window.confirm("저장된 API 키를 메모리에서 삭제할까요?");
+          if (!agreed) return;
+          await withButtonBusy(aiClearKeyBtn, async () => {
+            await saveAiConfig({ clearApiKey: true });
+          });
+        });
+      }
+
+      if (seedSearchBtn) {
+        seedSearchBtn.addEventListener("click", () => {
+          loadSeedSearchResults({ preserveChecked: false });
+        });
+      }
+
+      if (seedResetBtn) {
+        seedResetBtn.addEventListener("click", () => {
+          [
+            seedSchoolInput,
+            seedYearInput,
+            seedGradeInput,
+            seedSemesterInput,
+            seedExamInput,
+            seedSubjectInput,
+          ].forEach((el) => {
+            if (el) el.value = "";
+          });
+          if (seedPatternInput) seedPatternInput.value = "";
+          if (seedUnitKeywordInput) seedUnitKeywordInput.value = "";
+          loadSeedSearchResults({ preserveChecked: false });
+        });
+      }
+
+      if (seedCheckAllBtn) {
+        seedCheckAllBtn.addEventListener("click", () => {
+          seedResultList
+            ?.querySelectorAll('.similar-candidate-item input[type="checkbox"]')
+            .forEach((box) => {
+              box.checked = true;
+            });
+          syncSeedCheckedIdsFromDom();
+        });
+      }
+
+      if (seedUncheckAllBtn) {
+        seedUncheckAllBtn.addEventListener("click", () => {
+          seedResultList
+            ?.querySelectorAll('.similar-candidate-item input[type="checkbox"]')
+            .forEach((box) => {
+              box.checked = false;
+            });
+          syncSeedCheckedIdsFromDom();
+        });
+      }
+
+      if (generateRunBtn) {
+        generateRunBtn.addEventListener("click", async () => {
+          await withButtonBusy(generateRunBtn, async () => {
+            await runAutoGeneration();
+          });
+        });
+      }
+
+      if (generateRetryFailedBtn) {
+        generateRetryFailedBtn.addEventListener("click", async () => {
+          await withButtonBusy(generateRetryFailedBtn, async () => {
+            await runRetryFailedSeeds();
+          });
+        });
+      }
+
+      bindEditorDirtyState();
+
+      const initializeWhenTabOpened = async () => {
+        if (state.bootstrapped) return;
+        state.bootstrapped = true;
+        initializeSeedFilterOptions();
+        setSeedSelectionStatus("검색결과에서 Seed 문항을 체크하세요.");
+        await loadAiConfig();
+        await loadBatches({ preserveSelection: false });
+        await loadCandidates({ preserveSelection: false });
+      };
+
+      document.addEventListener("admin-tab-changed", async (event) => {
+        const tabId = event && event.detail ? String(event.detail.tab || "") : "";
+        if (tabId === "similar") {
+          await initializeWhenTabOpened();
+        }
+      });
+
+      const activeTab = document.querySelector(".tab-btn.is-active");
+      if (activeTab && String(activeTab.dataset.tabTarget || "") === "similar") {
+        initializeWhenTabOpened().catch((error) => {
+          const message = error && error.message ? error.message : "초기화 실패";
+          setEditorStatus(message, true);
+        });
+      }
+    })();
