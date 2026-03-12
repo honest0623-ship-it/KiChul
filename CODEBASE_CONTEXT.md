@@ -29,6 +29,7 @@ python app.py
 - `app.py`: Flask web UI for filtering/selecting problems and PDF generation.
 - `routes/problem_routes.py`: Problem asset/preview/content/meta/edit/delete/open-folder API route registration.
 - `routes/similar_routes.py`: AI runtime config + similar candidate generation/review/validation/promotion API route registration.
+- `routes/render_routes.py`: Output-folder open + PDF render route registration.
 - `templates/admin.html`: Web admin page shell/template (UI markup + bootstrap payload).
 - `static/admin.js`: Main admin frontend logic (filters/sorting/editor/similar-candidate workflows).
 - `build_exam.py`: CLI entry point for exam/answer/solution PDF generation.
