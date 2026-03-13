@@ -5,3 +5,6 @@ __pycache__/
 
 # Local output artifacts
 output/
+
+# Root-level temporary ingest artifacts
+/_tmp*
