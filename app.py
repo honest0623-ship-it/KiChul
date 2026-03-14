@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import fnmatch
+from dataclasses import dataclass
 from datetime import datetime
 from difflib import SequenceMatcher
 from html import escape
@@ -36,6 +37,7 @@ from unit_taxonomy import (
 from routes.problem_routes import register_problem_routes
 from routes.render_routes import register_render_routes
 from routes.similar_routes import register_similar_routes
+from services.problem_index import ProblemMetaIndex
 
 from services.ai_runtime import (
     AI_PROVIDER_DEFAULT_MODEL,
@@ -87,6 +89,8 @@ SIMILAR_GENERATION_MAX_SEEDS_PER_REQUEST = 6
 SIMILAR_PROMOTION_ENABLED = False
 FRONT_MATTER_CACHE_LOCK = Lock()
 FRONT_MATTER_CACHE: Dict[str, tuple[int, int, Dict[str, Any]]] = {}
+PROBLEM_META_INDEX_LOCK = Lock()
+PROBLEM_META_INDEX: ProblemMetaIndex | None = None
 
 DEFAULTS = {
     "school": "HN",
@@ -382,28 +386,7 @@ def _parse_generated_problem_ui_id(problem_id: str) -> tuple[str, str] | None:
 
 
 def _list_generated_batch_ids() -> List[str]:
-    if not DB_GENERATED_CANDIDATES_DIR.is_dir():
-        return []
-    rows = set()
-
-    for folder in sorted(DB_GENERATED_CANDIDATES_DIR.iterdir(), key=lambda p: p.name):
-        if not folder.is_dir():
-            continue
-
-        # Flat layout candidate folder
-        if (folder / "problem.md").is_file():
-            batch_id = _extract_generation_batch_id(folder)
-            if batch_id:
-                rows.add(batch_id)
-            continue
-
-        # Legacy nested batch folder
-        if not SIMILAR_BATCH_ID_RE.match(folder.name):
-            continue
-        if _scan_similar_candidate_dirs(folder):
-            rows.add(folder.name)
-
-    return sorted(rows)
+    return _problem_meta_index().list_generated_batch_ids()
 
 
 def _normalize_data_sources(raw_values: List[str]) -> List[str]:
@@ -519,18 +502,6 @@ def _resolve_similar_candidate_folder(batch_id: str, candidate_id: str) -> Path 
     return None
 
 
-def _scan_flat_similar_candidate_dirs() -> List[Path]:
-    rows: List[Path] = []
-    if not DB_GENERATED_CANDIDATES_DIR.is_dir():
-        return rows
-    for child in sorted(DB_GENERATED_CANDIDATES_DIR.iterdir(), key=lambda p: p.name):
-        if not child.is_dir():
-            continue
-        if (child / "problem.md").is_file():
-            rows.append(child)
-    return rows
-
-
 def _read_front_matter_cached(problem_md: Path) -> Dict[str, Any]:
     if not problem_md.is_file():
         return {}
@@ -589,26 +560,7 @@ def _extract_generation_batch_id(candidate_dir: Path) -> str:
 
 
 def _collect_batch_candidate_dirs(batch_id: str) -> Dict[str, Path]:
-    token = str(batch_id or "").strip()
-    if not token or not SIMILAR_BATCH_ID_RE.match(token):
-        return {}
-
-    rows: Dict[str, Path] = {}
-
-    # Flat layout candidates tagged by generation_batch_id
-    for candidate_dir in _scan_flat_similar_candidate_dirs():
-        generation_batch_id = _extract_generation_batch_id(candidate_dir)
-        if generation_batch_id != token:
-            continue
-        rows.setdefault(candidate_dir.name, candidate_dir)
-
-    # Legacy nested batch directory support
-    legacy_batch_dir = DB_GENERATED_CANDIDATES_DIR / token
-    if legacy_batch_dir.is_dir():
-        for candidate_dir in _scan_similar_candidate_dirs(legacy_batch_dir):
-            rows.setdefault(candidate_dir.name, candidate_dir)
-
-    return rows
+    return _problem_meta_index().collect_batch_candidate_dirs(batch_id)
 
 
 def _batch_report_path(batch_id: str, report_kind: str) -> Path:
@@ -936,132 +888,131 @@ def _resolve_mathjax_bundle_uri() -> str:
     return ""
 
 
+def _build_official_problem_meta_row(folder: Path) -> Dict[str, str] | None:
+    matched = PROBLEM_ID_RE.match(folder.name)
+    if not matched:
+        return None
+
+    problem_md = folder / "problem.md"
+    front_matter = _read_front_matter_quiet(problem_md)
+    source_no = _extract_source_no_from_front_matter(front_matter)
+    if not source_no:
+        source_no = _fallback_source_no(matched.group("number"), front_matter)
+    source_kind = _extract_source_kind(front_matter, matched.group("number"))
+    source_label = _build_source_label(source_no, source_kind)
+    unit = _extract_unit_from_front_matter(front_matter)
+    unit_l1_hint = unit.split(">", 1)[0] if unit else ""
+    level = _extract_level_from_front_matter(front_matter)
+    school = str(front_matter.get("school") or matched.group("school") or "").strip().upper()
+    year = str(front_matter.get("year") or matched.group("year") or "").strip()
+    grade = str(front_matter.get("grade") or matched.group("grade") or "").strip()
+    semester = str(front_matter.get("semester") or matched.group("semester") or "").strip()
+    exam = str(front_matter.get("exam") or matched.group("exam") or "").strip().upper()
+    subject = _normalize_subject_code(
+        front_matter.get("subject"),
+        unit_l1=unit_l1_hint,
+        fallback=matched.group("subject") or "",
+    )
+
+    return {
+        "id": folder.name,
+        "problem_id": folder.name,
+        "display_id": folder.name,
+        "root_kind": "official",
+        "batch_id": "",
+        "folder_path": str(folder),
+        "school": school,
+        "year": year,
+        "grade": grade,
+        "semester": semester,
+        "exam": exam,
+        "subject": subject,
+        "number": matched.group("number"),
+        "source_no": source_no,
+        "source_kind": source_kind,
+        "source_label": source_label,
+        "unit": unit,
+        "level": level,
+    }
+
+
+def _build_generated_problem_meta_row(batch_id: str, folder: Path) -> Dict[str, str] | None:
+    problem_md = folder / "problem.md"
+    front_matter = _read_front_matter_quiet(problem_md)
+    derived_from = str(front_matter.get("derived_from", "")).strip()
+    matched = PROBLEM_ID_RE.match(derived_from)
+    folder_number = matched.group("number") if matched else "001"
+    source_no = _extract_source_no_from_front_matter(front_matter)
+    if not source_no and matched:
+        source_no = _fallback_source_no(folder_number, front_matter)
+    source_kind = _extract_source_kind(front_matter, folder_number)
+    source_label = _build_source_label(source_no, source_kind)
+    unit = _extract_unit_from_front_matter(front_matter)
+    unit_l1_hint = unit.split(">", 1)[0] if unit else ""
+    level = _extract_level_from_front_matter(front_matter)
+    school = str(front_matter.get("school") or (matched.group("school") if matched else "") or "").strip().upper()
+    year = str(front_matter.get("year") or (matched.group("year") if matched else "") or "").strip()
+    grade = str(front_matter.get("grade") or (matched.group("grade") if matched else "") or "").strip()
+    semester = str(front_matter.get("semester") or (matched.group("semester") if matched else "") or "").strip()
+    exam = str(front_matter.get("exam") or (matched.group("exam") if matched else "") or "").strip().upper()
+    subject = _normalize_subject_code(
+        front_matter.get("subject"),
+        unit_l1=unit_l1_hint,
+        fallback=(matched.group("subject") if matched else "") or "",
+    )
+    candidate_id = folder.name
+    ui_id = _build_generated_problem_ui_id(batch_id, candidate_id)
+
+    return {
+        "id": ui_id,
+        "problem_id": candidate_id,
+        "display_id": candidate_id,
+        "root_kind": "generated",
+        "batch_id": batch_id,
+        "folder_path": str(folder),
+        "school": school,
+        "year": year,
+        "grade": grade,
+        "semester": semester,
+        "exam": exam,
+        "subject": subject,
+        "number": folder_number if matched else "",
+        "source_no": source_no,
+        "source_kind": source_kind,
+        "source_label": source_label,
+        "unit": unit,
+        "level": level,
+    }
+
+
+def _problem_meta_index() -> ProblemMetaIndex:
+    global PROBLEM_META_INDEX
+    if PROBLEM_META_INDEX is not None:
+        return PROBLEM_META_INDEX
+
+    with PROBLEM_META_INDEX_LOCK:
+        if PROBLEM_META_INDEX is None:
+            PROBLEM_META_INDEX = ProblemMetaIndex(
+                official_root=DB_PROBLEMS_DIR,
+                generated_root=DB_GENERATED_CANDIDATES_DIR,
+                problem_id_re=PROBLEM_ID_RE,
+                batch_id_re=SIMILAR_BATCH_ID_RE,
+                extract_flat_batch_id=_extract_generation_batch_id,
+                build_official_row=_build_official_problem_meta_row,
+                build_generated_row=_build_generated_problem_meta_row,
+            )
+    return PROBLEM_META_INDEX
+
+
 def _scan_problem_meta(
     *,
     data_sources: List[str] | None = None,
     generated_batches: List[str] | None = None,
 ) -> List[Dict[str, str]]:
-    rows: List[Dict[str, str]] = []
-    selected_sources = _normalize_data_sources(data_sources or ["official"])
-    include_official = "official" in selected_sources
-    include_generated = "generated" in selected_sources
-
-    if include_official and DB_PROBLEMS_DIR.exists():
-        for folder in DB_PROBLEMS_DIR.iterdir():
-            if not folder.is_dir():
-                continue
-            matched = PROBLEM_ID_RE.match(folder.name)
-            if not matched:
-                continue
-            problem_md = folder / "problem.md"
-            front_matter = _read_front_matter_quiet(problem_md)
-
-            source_no = _extract_source_no_from_front_matter(front_matter)
-            if not source_no:
-                source_no = _fallback_source_no(matched.group("number"), front_matter)
-            source_kind = _extract_source_kind(front_matter, matched.group("number"))
-            source_label = _build_source_label(source_no, source_kind)
-            unit = _extract_unit_from_front_matter(front_matter)
-            unit_l1_hint = unit.split(">", 1)[0] if unit else ""
-            level = _extract_level_from_front_matter(front_matter)
-            school = str(front_matter.get("school") or matched.group("school") or "").strip().upper()
-            year = str(front_matter.get("year") or matched.group("year") or "").strip()
-            grade = str(front_matter.get("grade") or matched.group("grade") or "").strip()
-            semester = str(front_matter.get("semester") or matched.group("semester") or "").strip()
-            exam = str(front_matter.get("exam") or matched.group("exam") or "").strip().upper()
-            subject = _normalize_subject_code(
-                front_matter.get("subject"),
-                unit_l1=unit_l1_hint,
-                fallback=matched.group("subject") or "",
-            )
-
-            rows.append(
-                {
-                    "id": folder.name,
-                    "problem_id": folder.name,
-                    "display_id": folder.name,
-                    "root_kind": "official",
-                    "batch_id": "",
-                    "folder_path": str(folder),
-                    "school": school,
-                    "year": year,
-                    "grade": grade,
-                    "semester": semester,
-                    "exam": exam,
-                    "subject": subject,
-                    "number": matched.group("number"),
-                    "source_no": source_no,
-                    "source_kind": source_kind,
-                    "source_label": source_label,
-                    "unit": unit,
-                    "level": level,
-                }
-            )
-
-    if include_generated and DB_GENERATED_CANDIDATES_DIR.exists():
-        available_batches = _list_generated_batch_ids()
-        selected_batches = (
-            _normalize_generated_batches(generated_batches or [], available_batches)
-            if generated_batches is not None
-            else list(available_batches)
-        )
-        if not selected_batches:
-            selected_batches = list(available_batches)
-
-        for batch_id in selected_batches:
-            candidate_dirs = _collect_batch_candidate_dirs(batch_id)
-            for folder in candidate_dirs.values():
-                problem_md = folder / "problem.md"
-                front_matter = _read_front_matter_quiet(problem_md)
-
-                derived_from = str(front_matter.get("derived_from", "")).strip()
-                matched = PROBLEM_ID_RE.match(derived_from)
-                folder_number = matched.group("number") if matched else "001"
-                source_no = _extract_source_no_from_front_matter(front_matter)
-                if not source_no and matched:
-                    source_no = _fallback_source_no(folder_number, front_matter)
-                source_kind = _extract_source_kind(front_matter, folder_number)
-                source_label = _build_source_label(source_no, source_kind)
-                unit = _extract_unit_from_front_matter(front_matter)
-                unit_l1_hint = unit.split(">", 1)[0] if unit else ""
-                level = _extract_level_from_front_matter(front_matter)
-                school = str(front_matter.get("school") or (matched.group("school") if matched else "") or "").strip().upper()
-                year = str(front_matter.get("year") or (matched.group("year") if matched else "") or "").strip()
-                grade = str(front_matter.get("grade") or (matched.group("grade") if matched else "") or "").strip()
-                semester = str(front_matter.get("semester") or (matched.group("semester") if matched else "") or "").strip()
-                exam = str(front_matter.get("exam") or (matched.group("exam") if matched else "") or "").strip().upper()
-                subject = _normalize_subject_code(
-                    front_matter.get("subject"),
-                    unit_l1=unit_l1_hint,
-                    fallback=(matched.group("subject") if matched else "") or "",
-                )
-                candidate_id = folder.name
-                ui_id = _build_generated_problem_ui_id(batch_id, candidate_id)
-
-                rows.append(
-                    {
-                        "id": ui_id,
-                        "problem_id": candidate_id,
-                        "display_id": candidate_id,
-                        "root_kind": "generated",
-                        "batch_id": batch_id,
-                        "folder_path": str(folder),
-                        "school": school,
-                        "year": year,
-                        "grade": grade,
-                        "semester": semester,
-                        "exam": exam,
-                        "subject": subject,
-                        "number": folder_number if matched else "",
-                        "source_no": source_no,
-                        "source_kind": source_kind,
-                        "source_label": source_label,
-                        "unit": unit,
-                        "level": level,
-                    }
-                )
-
-    return sorted(rows, key=lambda item: (str(item.get("root_kind", "")), str(item.get("batch_id", "")), str(item["id"])))
+    return _problem_meta_index().scan_problem_meta(
+        data_sources=data_sources,
+        generated_batches=generated_batches,
+    )
 
 
 def _pattern_candidates_for_row(row: Dict[str, str]) -> List[str]:
@@ -1286,6 +1237,32 @@ def _build_pdf_filter_options(problem_meta: List[Dict[str, str]], *, generated_b
         "levels": _distinct_values(problem_meta, "level", numeric=True),
         "source_numbers": _sort_source_labels(list(source_labels)),
     }
+
+
+def _problem_meta_for_bootstrap(problem_meta: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    keys = (
+        "id",
+        "problem_id",
+        "display_id",
+        "root_kind",
+        "batch_id",
+        "school",
+        "year",
+        "grade",
+        "semester",
+        "exam",
+        "subject",
+        "number",
+        "source_no",
+        "source_kind",
+        "source_label",
+        "unit",
+        "level",
+    )
+    rows: List[Dict[str, str]] = []
+    for row in problem_meta:
+        rows.append({key: str(row.get(key, "") or "") for key in keys})
+    return rows
 
 
 def _safe_int_token(raw: str, field_name: str) -> int:
@@ -1594,19 +1571,6 @@ def _next_problem_id_for_prefix(prefix: str) -> str:
     return f"{prefix}-{candidate:03d}"
 
 
-def _scan_similar_candidate_dirs(batch_dir: Path) -> List[Path]:
-    rows: List[Path] = []
-    if not batch_dir.is_dir():
-        return rows
-    for child in sorted(batch_dir.iterdir(), key=lambda p: p.name):
-        if not child.is_dir():
-            continue
-        if not (child / "problem.md").is_file():
-            continue
-        rows.append(child)
-    return rows
-
-
 def _objective_like_candidate(front: Dict[str, Any], candidate_id: str) -> bool:
     kind = str(front.get("source_question_kind", "")).strip().lower()
     if kind in {"objective", "obj", "multiple"}:
@@ -1674,7 +1638,7 @@ def _read_pdf_selected(defaults: Dict[str, str], pdf_options: Dict[str, Any]) ->
         "reset_question_number_by_school": request.args.get("reset_question_number_by_school", "0") == "1",
         "exam_sheet": request.args.get("exam_sheet", "1") != "0",
         "answer_sheet": request.args.get("answer_sheet", "0") == "1",
-        "solution_sheet": request.args.get("solution_sheet", "1") != "0",
+        "solution_sheet": request.args.get("solution_sheet", "0") == "1",
         "title": _normalize_title(request.args.get("title"), default=DEFAULT_EXAM_TITLE),
     }
 
@@ -1688,23 +1652,150 @@ def index():
         data_sources=["official", "generated"],
         generated_batches=available_generated_batches,
     )
+    # Keep initial payload lean; row details are fetched on demand via /api/problem-meta-list.
+    bootstrap_problem_meta: List[Dict[str, str]] = []
     pdf_options = _build_pdf_filter_options(problem_meta, generated_batches=available_generated_batches)
     pdf_selected = _read_pdf_selected(defaults, pdf_options)
     return render_template(
         "admin.html",
         pdf_options=pdf_options,
         pdf_selected=pdf_selected,
-        problem_meta=problem_meta,
+        problem_meta=bootstrap_problem_meta,
         output_dir=OUTPUT_DIR,
         mathjax_bundle_uri=_resolve_mathjax_bundle_uri(),
     )
 
 
-register_problem_routes(app, globals())
-register_similar_routes(app, globals())
+@dataclass(frozen=True)
+class AppRouteServices:
+    problem: Dict[str, Any]
+    similar: Dict[str, Any]
+    render: Dict[str, Any]
 
 
-register_render_routes(app, globals())
+def _build_route_services() -> AppRouteServices:
+    problem_deps: Dict[str, Any] = {
+        "VENDOR_DIR": VENDOR_DIR,
+        "normalize_unit_triplet": normalize_unit_triplet,
+        "parse_problem_file": parse_problem_file,
+        "shutil": shutil,
+        "_build_preview_payload": _build_preview_payload,
+        "_extract_level_from_front_matter": _extract_level_from_front_matter,
+        "_extract_source_kind": _extract_source_kind,
+        "_extract_source_no_from_front_matter": _extract_source_no_from_front_matter,
+        "_fallback_source_no": _fallback_source_no,
+        "_id_groups_for_problem_meta": _id_groups_for_problem_meta,
+        "_invalidate_front_matter_cache_for_folder": _invalidate_front_matter_cache_for_folder,
+        "_normalize_subject_code": _normalize_subject_code,
+        "_open_path_in_file_manager": _open_path_in_file_manager,
+        "_parse_generated_problem_ui_id": _parse_generated_problem_ui_id,
+        "_refresh_problem_meta_row": _refresh_problem_meta_row,
+        "_resolve_problem_folder": _resolve_problem_folder,
+        "_resolve_problem_folder_any": _resolve_problem_folder_any,
+        "_resolve_similar_candidate_folder": _resolve_similar_candidate_folder,
+        "_rewrite_problem_md": _rewrite_problem_md,
+        "_rewrite_problem_md_sections": _rewrite_problem_md_sections,
+        "_safe_int_token": _safe_int_token,
+        "_scan_problem_meta": _scan_problem_meta,
+        "_serialize_problem_meta": _serialize_problem_meta,
+        "_serialize_problem_sections": _serialize_problem_sections,
+    }
+
+    similar_deps: Dict[str, Any] = {
+        "AI_CONFIG_LOCK": AI_CONFIG_LOCK,
+        "AI_RUNTIME_CONFIG": AI_RUNTIME_CONFIG,
+        "AI_SUPPORTED_PROVIDERS": AI_SUPPORTED_PROVIDERS,
+        "DB_GENERATED_CANDIDATES_DIR": DB_GENERATED_CANDIDATES_DIR,
+        "DB_PROBLEMS_DIR": DB_PROBLEMS_DIR,
+        "DRAFT_TOKEN": DRAFT_TOKEN,
+        "PROBLEM_ID_RE": PROBLEM_ID_RE,
+        "SIMILAR_GENERATION_MAX_ATTEMPTS": SIMILAR_GENERATION_MAX_ATTEMPTS,
+        "SIMILAR_GENERATION_MAX_SEEDS_PER_REQUEST": SIMILAR_GENERATION_MAX_SEEDS_PER_REQUEST,
+        "SIMILAR_PROMOTION_ENABLED": SIMILAR_PROMOTION_ENABLED,
+        "SequenceMatcher": SequenceMatcher,
+        "datetime": datetime,
+        "json": json,
+        "normalize_unit_triplet": normalize_unit_triplet,
+        "parse_problem_file": parse_problem_file,
+        "shutil": shutil,
+        "_as_positive_int": _as_positive_int,
+        "_batch_report_path": _batch_report_path,
+        "_build_similar_candidate_id": _build_similar_candidate_id,
+        "_build_similar_generation_prompt": _build_similar_generation_prompt,
+        "_build_similar_preview_payload": _build_similar_preview_payload,
+        "_call_ai_model_text": _call_ai_model_text,
+        "_collect_batch_candidate_dirs": _collect_batch_candidate_dirs,
+        "_count_choice_lines": _count_choice_lines,
+        "_current_ai_runtime_secret": _current_ai_runtime_secret,
+        "_default_ai_model": _default_ai_model,
+        "_extract_ids": _extract_ids,
+        "_invalidate_front_matter_cache_for_folder": _invalidate_front_matter_cache_for_folder,
+        "_is_generation_retryable_error": _is_generation_retryable_error,
+        "_is_timeout_generation_error": _is_timeout_generation_error,
+        "_latex_balance_issues": _latex_balance_issues,
+        "_list_generated_batch_ids": _list_generated_batch_ids,
+        "_model_allowed_for_provider": _model_allowed_for_provider,
+        "_next_problem_id_for_prefix": _next_problem_id_for_prefix,
+        "_normalize_ai_provider": _normalize_ai_provider,
+        "_normalize_for_similarity": _normalize_for_similarity,
+        "_normalize_runtime_config_unlocked": _normalize_runtime_config_unlocked,
+        "_now_iso": _now_iso,
+        "_objective_like_candidate": _objective_like_candidate,
+        "_parse_generated_sections": _parse_generated_sections,
+        "_parse_int": _parse_int,
+        "_provider_display_name": _provider_display_name,
+        "_resolve_problem_folder": _resolve_problem_folder,
+        "_resolve_similar_candidate_folder": _resolve_similar_candidate_folder,
+        "_rewrite_problem_md_sections": _rewrite_problem_md_sections,
+        "_save_source_snapshot": _save_source_snapshot,
+        "_seed_ids_from_payload": _seed_ids_from_payload,
+        "_serialize_ai_runtime_config": _serialize_ai_runtime_config,
+        "_serialize_problem_sections": _serialize_problem_sections,
+        "_unique_batch_id": _unique_batch_id,
+    }
+
+    render_deps: Dict[str, Any] = {
+        "BASE_DIR": BASE_DIR,
+        "DEFAULT_EXAM_TITLE": DEFAULT_EXAM_TITLE,
+        "DEFAULT_SORT_FIELD_SLOTS": DEFAULT_SORT_FIELD_SLOTS,
+        "OUTPUT_DIR": OUTPUT_DIR,
+        "Path": Path,
+        "default_selected_unit_nodes": default_selected_unit_nodes,
+        "expand_unit_nodes_to_leaf_paths": expand_unit_nodes_to_leaf_paths,
+        "subprocess": subprocess,
+        "sys": sys,
+        "tempfile": tempfile,
+        "_apply_manual_order": _apply_manual_order,
+        "_current_defaults": _current_defaults,
+        "_effective_sort_fields": _effective_sort_fields,
+        "_extract_ids": _extract_ids,
+        "_matches_pattern_for_row": _matches_pattern_for_row,
+        "_normalize_data_source": _normalize_data_source,
+        "_normalize_paper": _normalize_paper,
+        "_normalize_problems_per_page": _normalize_problems_per_page,
+        "_normalize_sort_field_slots": _normalize_sort_field_slots,
+        "_normalize_sort_order": _normalize_sort_order,
+        "_normalize_title": _normalize_title,
+        "_normalize_values": _normalize_values,
+        "_open_path_in_file_manager": _open_path_in_file_manager,
+        "_parse_int": _parse_int,
+        "_resolve_unique_pdf_path": _resolve_unique_pdf_path,
+        "_scan_problem_meta": _scan_problem_meta,
+        "_sort_selected_problem_ids": _sort_selected_problem_ids,
+    }
+
+    return AppRouteServices(
+        problem=problem_deps,
+        similar=similar_deps,
+        render=render_deps,
+    )
+
+
+ROUTE_SERVICES = _build_route_services()
+
+register_problem_routes(app, ROUTE_SERVICES.problem)
+register_similar_routes(app, ROUTE_SERVICES.similar)
+register_render_routes(app, ROUTE_SERVICES.render)
 
 
 if __name__ == "__main__":

@@ -307,6 +307,22 @@
     .manual-order-edit:hover {
       background: #115e59;
     }
+    .manual-order-pagebar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+    .manual-order-pagebar .btn {
+      padding: 5px 8px;
+      font-size: 11px;
+    }
+    .manual-order-page-status {
+      font-size: 12px;
+      color: #475569;
+      min-height: 18px;
+    }
     .meta-editor-backdrop {
       position: fixed;
       inset: 0;
@@ -713,6 +729,21 @@
       display: grid;
       gap: 6px;
       min-height: 0;
+    }
+    .similar-seed-pagebar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .similar-seed-pagebar .btn {
+      padding: 5px 8px;
+      font-size: 11px;
+    }
+    .similar-seed-page-status {
+      font-size: 12px;
+      color: #475569;
+      min-height: 18px;
     }
     .similar-seed-preview-panel {
       border: 1px solid #d6e0ea;
@@ -1328,9 +1359,20 @@
             <p class="muted">필터 결과를 불러온 뒤 항목을 드래그해 순서를 바꾸고, 체크박스로 출제 문항을 선택하세요. 체크된 문항만 출제됩니다.</p>
             <div class="inline" style="margin-top: 6px;">
               <button class="btn secondary js-load-filtered-order" type="button" style="padding: 6px 10px;">필터 결과 불러오기</button>
+              <button class="btn secondary js-load-filtered-order-prev" type="button" style="padding: 6px 10px;">이전 페이지</button>
+              <button class="btn secondary js-load-filtered-order-next" type="button" style="padding: 6px 10px;">다음 페이지</button>
+              <button class="btn secondary js-load-filtered-order-all" type="button" style="padding: 6px 10px;">모든 페이지 불러오기</button>
+              <label style="display:flex;align-items:center;gap:6px;margin-left:4px;font-size:12px;color:#334155;">
+                <input id="manual-auto-load-all-pages" type="checkbox" checked />
+                자동 전체 로드(필터/출력 시)
+              </label>
               <button class="btn secondary js-clear-manual-order" type="button" style="padding: 6px 10px;">수동 순서 초기화</button>
               <button class="btn secondary js-manual-check-all" type="button" style="padding: 6px 10px;">전체선택</button>
               <button class="btn secondary js-manual-uncheck-all" type="button" style="padding: 6px 10px;">전체 해제</button>
+            </div>
+            <p id="manual-order-load-status" class="muted" style="margin-top: 6px;">필터 결과를 불러오면 목록이 갱신됩니다.</p>
+            <div class="manual-order-pagebar">
+              <div id="manual-order-page-status" class="manual-order-page-status">페이지 0</div>
             </div>
             <div class="manual-order-main">
               <ul id="manual-order-list" class="manual-order-list"></ul>
@@ -1508,6 +1550,11 @@
             <ul id="similar-seed-result-list" class="similar-candidate-list similar-seed-result-list" role="listbox" aria-label="Seed 검색결과">
               <li class="empty">검색조건을 넣고 "검색 결과 보기"를 누르세요.</li>
             </ul>
+            <div class="similar-seed-pagebar">
+              <button class="btn secondary" id="similar-seed-page-prev" type="button">이전 페이지</button>
+              <button class="btn secondary" id="similar-seed-page-next" type="button">다음 페이지</button>
+              <div class="similar-seed-page-status" id="similar-seed-page-status">페이지 1</div>
+            </div>
             <div class="similar-generate-status" id="similar-seed-selection-status">선택 Seed 0개</div>
           </div>
         </div>

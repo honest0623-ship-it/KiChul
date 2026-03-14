@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
-from typing import Any, Dict
+import fnmatch
+from typing import Any, Dict, List
 
 from flask import abort, jsonify, request, send_from_directory
 
@@ -29,8 +30,75 @@ def register_problem_routes(app, deps: Dict[str, Any]) -> None:
     _rewrite_problem_md = deps["_rewrite_problem_md"]
     _rewrite_problem_md_sections = deps["_rewrite_problem_md_sections"]
     _safe_int_token = deps["_safe_int_token"]
+    _scan_problem_meta = deps["_scan_problem_meta"]
     _serialize_problem_meta = deps["_serialize_problem_meta"]
     _serialize_problem_sections = deps["_serialize_problem_sections"]
+
+    def _split_tokens(raw: str) -> List[str]:
+        token = str(raw or "").strip()
+        if not token:
+            return []
+        rows: List[str] = []
+        for part in token.replace(",", " ").split():
+            item = part.strip()
+            if item:
+                rows.append(item)
+        return rows
+
+    def _query_values(name: str) -> List[str]:
+        rows: List[str] = []
+        for raw in request.args.getlist(name):
+            rows.extend(_split_tokens(raw))
+        if rows:
+            return rows
+        return _split_tokens(request.args.get(name, ""))
+
+    def _normalize_source_selector(raw: str) -> List[str] | None:
+        token = str(raw or "official").strip().lower()
+        if token in {"official", "generated"}:
+            return [token]
+        if token in {"all", "both", "*"}:
+            return ["official", "generated"]
+        return None
+
+    def _safe_positive_int(raw: Any, *, default: int, minimum: int = 1, maximum: int = 500) -> int:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            value = default
+        if value < minimum:
+            return minimum
+        if value > maximum:
+            return maximum
+        return value
+
+    def _meta_row_for_client(row: Dict[str, Any]) -> Dict[str, str]:
+        keys = (
+            "id",
+            "problem_id",
+            "display_id",
+            "root_kind",
+            "batch_id",
+            "school",
+            "year",
+            "grade",
+            "semester",
+            "exam",
+            "subject",
+            "number",
+            "source_no",
+            "source_kind",
+            "source_label",
+            "unit",
+            "level",
+        )
+        return {key: str(row.get(key, "") or "") for key in keys}
+
+    def _match_filter_value(row: Dict[str, Any], key: str, selected: set[str]) -> bool:
+        if not selected:
+            return True
+        token = str(row.get(key, "") or "").strip()
+        return token in selected
 
     @app.get("/vendor-assets/<path:asset_rel>")
     def vendor_asset(asset_rel: str):
@@ -254,6 +322,162 @@ def register_problem_routes(app, deps: Dict[str, Any]) -> None:
     
         payload = _serialize_problem_meta(problem_id, front)
         return jsonify({"id": problem_id, "meta": payload})
+
+
+    @app.get("/api/problem-meta-list")
+    def problem_meta_list():
+        source_raw = request.args.get("source", "official")
+        data_sources = _normalize_source_selector(source_raw)
+        if data_sources is None:
+            return jsonify({"error": "invalid-query", "detail": "source must be official|generated|all"}), 400
+
+        generated_batches = _query_values("generated_batch")
+        if not generated_batches:
+            generated_batches = _query_values("generated_batches")
+        generated_batches_arg = generated_batches if generated_batches else None
+
+        rows = _scan_problem_meta(
+            data_sources=data_sources,
+            generated_batches=generated_batches_arg,
+        )
+
+        schools = set(_query_values("school"))
+        years = set(_query_values("year"))
+        grades = set(_query_values("grade"))
+        semesters = set(_query_values("semester"))
+        exams = {item.upper() for item in _query_values("exam")}
+        subjects = {item.upper() for item in _query_values("subject")}
+        levels = set(_query_values("level"))
+        source_labels = set(_query_values("source_label"))
+        pattern = str(request.args.get("pattern", "")).strip()
+        unit_keyword = str(request.args.get("unit_keyword", "")).strip().lower()
+        selector_ids = _query_values("selector_id")
+        if not selector_ids:
+            selector_ids = _query_values("selector_ids")
+        if not selector_ids:
+            selector_ids = _query_values("id")
+        selector_id_order: Dict[str, int] = {}
+        selector_id_set = set()
+        for token in selector_ids:
+            item = str(token or "").strip()
+            if not item or item in selector_id_set:
+                continue
+            selector_id_order[item] = len(selector_id_order)
+            selector_id_set.add(item)
+
+        filtered: List[Dict[str, str]] = []
+        for row in rows:
+            row_id = str(row.get("id", "") or "")
+            row_display_id = str(row.get("display_id", "") or "")
+            row_problem_id = str(row.get("problem_id", "") or "")
+            if selector_id_set and row_id not in selector_id_set and row_display_id not in selector_id_set and row_problem_id not in selector_id_set:
+                continue
+            if not _match_filter_value(row, "school", schools):
+                continue
+            if not _match_filter_value(row, "year", years):
+                continue
+            if not _match_filter_value(row, "grade", grades):
+                continue
+            if not _match_filter_value(row, "semester", semesters):
+                continue
+            exam_token = str(row.get("exam", "") or "").strip().upper()
+            if exams and exam_token not in exams:
+                continue
+            subject_token = str(row.get("subject", "") or "").strip().upper()
+            if subjects and subject_token not in subjects:
+                continue
+            if not _match_filter_value(row, "level", levels):
+                continue
+            if not _match_filter_value(row, "source_label", source_labels):
+                continue
+            if unit_keyword and unit_keyword not in str(row.get("unit", "") or "").strip().lower():
+                continue
+            if pattern:
+                pattern_token = pattern.strip()
+                id_candidates = (
+                    row_id,
+                    row_display_id,
+                    row_problem_id,
+                )
+                lowered = pattern_token.lower()
+                if any(char in pattern_token for char in "*?[]"):
+                    matched = any(fnmatch.fnmatch(candidate, pattern_token) for candidate in id_candidates if candidate)
+                else:
+                    matched = any(lowered in candidate.lower() for candidate in id_candidates if candidate)
+                if not matched:
+                    continue
+            filtered.append(_meta_row_for_client(row))
+
+        if selector_id_order:
+            missing_rank = len(selector_id_order) + 1
+
+            def selector_sort_key(item: Dict[str, str]) -> tuple[int, str]:
+                candidates = (
+                    str(item.get("id", "") or ""),
+                    str(item.get("display_id", "") or ""),
+                    str(item.get("problem_id", "") or ""),
+                )
+                rank = min((selector_id_order.get(candidate, missing_rank) for candidate in candidates), default=missing_rank)
+                return (rank, str(item.get("id", "") or ""))
+
+            filtered.sort(key=selector_sort_key)
+
+        page = _safe_positive_int(request.args.get("page"), default=1, minimum=1, maximum=500000)
+        page_size = _safe_positive_int(request.args.get("page_size"), default=120, minimum=1, maximum=500)
+        total = len(filtered)
+        start = (page - 1) * page_size
+        end = start + page_size
+        items = filtered[start:end] if start < total else []
+        has_more = end < total
+
+        return jsonify(
+            {
+                "ok": True,
+                "source": data_sources[0] if len(data_sources) == 1 else "all",
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "has_more": has_more,
+                "items": items,
+            }
+        )
+
+
+    @app.get("/api/problem-meta-filter-options")
+    def problem_meta_filter_options():
+        source_raw = request.args.get("source", "official")
+        data_sources = _normalize_source_selector(source_raw)
+        if data_sources is None:
+            return jsonify({"error": "invalid-query", "detail": "source must be official|generated|all"}), 400
+
+        rows = _scan_problem_meta(data_sources=data_sources)
+
+        def distinct(key: str, *, numeric: bool = False, upper: bool = False) -> List[str]:
+            values = set()
+            for row in rows:
+                token = str(row.get(key, "") or "").strip()
+                if not token:
+                    continue
+                if upper:
+                    token = token.upper()
+                values.add(token)
+            if not numeric:
+                return sorted(values)
+            return sorted(values, key=lambda item: (0, int(item)) if item.isdigit() else (1, item))
+
+        return jsonify(
+            {
+                "ok": True,
+                "source": data_sources[0] if len(data_sources) == 1 else "all",
+                "schools": distinct("school", upper=True),
+                "years": distinct("year", numeric=True),
+                "grades": distinct("grade", numeric=True),
+                "semesters": distinct("semester", numeric=True),
+                "exams": distinct("exam", upper=True),
+                "subjects": distinct("subject", upper=True),
+                "levels": distinct("level", numeric=True),
+            }
+        )
     
     
     @app.post("/api/problem-meta")

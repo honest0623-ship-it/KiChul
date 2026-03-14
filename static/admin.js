@@ -153,9 +153,15 @@
       const sortOrderInput = document.getElementById("sort_order");
       const renderForm = document.querySelector('form[action="/render"]');
       const loadFilteredOrderBtn = document.querySelector(".js-load-filtered-order");
+      const loadFilteredOrderPrevBtn = document.querySelector(".js-load-filtered-order-prev");
+      const loadFilteredOrderNextBtn = document.querySelector(".js-load-filtered-order-next");
+      const loadFilteredOrderAllBtn = document.querySelector(".js-load-filtered-order-all");
+      const manualAutoLoadAllPagesInput = document.getElementById("manual-auto-load-all-pages");
       const clearManualOrderBtn = document.querySelector(".js-clear-manual-order");
       const manualCheckAllBtn = document.querySelector(".js-manual-check-all");
       const manualUncheckAllBtn = document.querySelector(".js-manual-uncheck-all");
+      const manualOrderLoadStatus = document.getElementById("manual-order-load-status");
+      const manualOrderPageStatus = document.getElementById("manual-order-page-status");
       const defaultPreviewMessage = "문항을 마우스로 클릭하거나, 선택된 문항에서 방향키로 이동하면 미리보기가 갱신됩니다.";
       const metaEditorBackdrop = document.getElementById("meta-editor-backdrop");
       const metaEditorSubtitle = document.getElementById("meta-editor-subtitle");
@@ -187,11 +193,47 @@
       const contentCache = new Map();
       let editorProblemId = "";
       let editorDirty = false;
+      let manualOrderLoading = false;
+      let renderSubmitPending = false;
+      const MANUAL_ORDER_FETCH_PAGE_SIZE = 300;
+      const MANUAL_ORDER_FETCH_MAX_PAGES = 5000;
+      const MANUAL_AUTO_ALL_PAGES_STORAGE_KEY = "manual-auto-load-all-pages";
+      const manualMetaPaging = {
+        queryKey: "",
+        mode: "none",
+        page: 0,
+        pageSize: MANUAL_ORDER_FETCH_PAGE_SIZE,
+        total: 0,
+        hasMore: false,
+        rows: [],
+        pageRows: new Map(),
+        pageView: new Map(),
+      };
 
       const parseIds = (raw) => {
         const token = (raw || "").trim();
         if (!token) return [];
         return token.split(/[\s,]+/).filter(Boolean);
+      };
+
+      const readManualAutoAllPagesPreference = () => {
+        try {
+          const raw = window.localStorage.getItem(MANUAL_AUTO_ALL_PAGES_STORAGE_KEY);
+          if (raw === "0") return false;
+          if (raw === "1") return true;
+        } catch (_) {}
+        return true;
+      };
+
+      const writeManualAutoAllPagesPreference = (enabled) => {
+        try {
+          window.localStorage.setItem(MANUAL_AUTO_ALL_PAGES_STORAGE_KEY, enabled ? "1" : "0");
+        } catch (_) {}
+      };
+
+      const manualAutoAllPagesEnabled = () => {
+        if (!manualAutoLoadAllPagesInput) return true;
+        return !!manualAutoLoadAllPagesInput.checked;
       };
 
       const MANUAL_PANE_SPLIT_STORAGE_KEY = "manual-pane-preview-height";
@@ -828,6 +870,309 @@
           (box) => box.value
         );
 
+      const getAllCheckboxValues = (name) =>
+        Array.from(document.querySelectorAll(`input[type="checkbox"][name="${name}"]`))
+          .map((box) => String(box.value || "").trim())
+          .filter(Boolean);
+
+      const setManualLoadStatus = (message, isError = false) => {
+        if (!manualOrderLoadStatus) return;
+        manualOrderLoadStatus.textContent = String(message || "");
+        manualOrderLoadStatus.style.color = isError ? "#b91c1c" : "#6b7280";
+      };
+
+      const parseMetaListError = (payload, status) => {
+        if (payload && typeof payload === "object") {
+          if (payload.detail) return String(payload.detail);
+          if (payload.error) return String(payload.error);
+        }
+        return `HTTP ${status}`;
+      };
+
+      const fetchProblemMetaListPage = async (query) => {
+        const response = await fetch(`/api/problem-meta-list?${query.toString()}`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(parseMetaListError(payload, response.status));
+        }
+        return payload;
+      };
+
+      const buildManualMetaListQuery = ({ page = 1, pageSize = MANUAL_ORDER_FETCH_PAGE_SIZE } = {}) => {
+        const query = new URLSearchParams();
+        const selectedDataSourceInput = document.querySelector('input[name="data_source"]:checked');
+        const selectedDataSource = selectedDataSourceInput
+          ? String(selectedDataSourceInput.value || "").trim().toLowerCase()
+          : "official";
+        query.set("source", selectedDataSource);
+        query.set("page", String(Math.max(1, Number(page || 1))));
+        query.set("page_size", String(Math.max(1, Number(pageSize || MANUAL_ORDER_FETCH_PAGE_SIZE))));
+
+        const appendWhenPartial = (queryName, inputName, transform = (value) => value) => {
+          const allValues = getAllCheckboxValues(inputName);
+          const selectedValues = getCheckedValues(inputName)
+            .map((value) => String(value || "").trim())
+            .filter(Boolean);
+          if (!selectedValues.length) return;
+          if (allValues.length && selectedValues.length >= allValues.length) {
+            return;
+          }
+          selectedValues.forEach((value) => {
+            query.append(queryName, transform(value));
+          });
+        };
+
+        appendWhenPartial("school", "schools");
+        appendWhenPartial("year", "years");
+        appendWhenPartial("grade", "grades");
+        appendWhenPartial("semester", "semesters");
+        appendWhenPartial("exam", "exams", (value) => String(value || "").toUpperCase());
+        appendWhenPartial("level", "levels");
+        appendWhenPartial("source_label", "source_numbers");
+
+        const patternText = selectorPatternInput ? String(selectorPatternInput.value || "").trim() : "";
+        if (patternText && /[*?[\]]/.test(patternText)) {
+          query.set("pattern", patternText);
+        }
+
+        return query;
+      };
+
+      const manualMetaQueryKey = () => {
+        const query = buildManualMetaListQuery({ page: 1, pageSize: manualMetaPaging.pageSize });
+        query.delete("page");
+        return query.toString();
+      };
+
+      const dedupeRowsById = (rows) => {
+        const rowById = new Map();
+        (Array.isArray(rows) ? rows : []).forEach((row) => {
+          if (!row || !row.id) return;
+          rowById.set(String(row.id), row);
+        });
+        return Array.from(rowById.values());
+      };
+
+      const manualMetaTotalPages = () => {
+        const pageSize = Math.max(1, Number(manualMetaPaging.pageSize || MANUAL_ORDER_FETCH_PAGE_SIZE));
+        const total = Math.max(0, Number(manualMetaPaging.total || 0));
+        if (total > 0) {
+          return Math.max(1, Math.ceil(total / pageSize));
+        }
+        if (!manualMetaPaging.page) return 0;
+        return manualMetaPaging.hasMore ? manualMetaPaging.page + 1 : manualMetaPaging.page;
+      };
+
+      const rowsFromLoadedPages = () => {
+        const pages = Array.from(manualMetaPaging.pageRows.keys())
+          .map((page) => Number(page || 0))
+          .filter((page) => page > 0)
+          .sort((a, b) => a - b);
+        const rows = [];
+        pages.forEach((page) => {
+          const pageRows = manualMetaPaging.pageRows.get(page) || [];
+          rows.push(...pageRows);
+        });
+        return dedupeRowsById(rows);
+      };
+
+      const updateManualMetaPagingUi = () => {
+        const totalPages = manualMetaTotalPages();
+        if (manualOrderPageStatus) {
+          if (!manualMetaPaging.page) {
+            manualOrderPageStatus.textContent = "페이지 0";
+          } else if (manualMetaPaging.mode === "all") {
+            const shown = manualMetaPaging.rows.length;
+            const total = Math.max(shown, Number(manualMetaPaging.total || shown));
+            manualOrderPageStatus.textContent = `전체 모드 | ${shown}/${total}`;
+          } else {
+            const total = Math.max(0, Number(manualMetaPaging.total || 0));
+            const shown = manualMetaPaging.rows.length;
+            manualOrderPageStatus.textContent = total
+              ? `페이지 ${manualMetaPaging.page}/${Math.max(1, totalPages)} | ${shown}/${total}`
+              : `페이지 ${manualMetaPaging.page}/${Math.max(1, totalPages)} | ${shown}`;
+          }
+        }
+        if (loadFilteredOrderPrevBtn) {
+          const canPrev = manualMetaPaging.mode === "page" && manualMetaPaging.page > 1;
+          loadFilteredOrderPrevBtn.disabled = manualOrderLoading || !canPrev;
+        }
+        if (loadFilteredOrderNextBtn) {
+          const canNext =
+            manualMetaPaging.mode === "page" &&
+            !!manualMetaPaging.page &&
+            manualMetaPaging.page < Math.max(1, totalPages);
+          loadFilteredOrderNextBtn.disabled = manualOrderLoading || !canNext;
+        }
+        if (loadFilteredOrderAllBtn) {
+          const canAll =
+            manualMetaPaging.mode !== "all" &&
+            !!manualMetaPaging.page &&
+            Math.max(1, totalPages) > 1;
+          loadFilteredOrderAllBtn.disabled = manualOrderLoading || !canAll;
+        }
+      };
+
+      const resetManualMetaPaging = () => {
+        manualMetaPaging.queryKey = "";
+        manualMetaPaging.mode = "none";
+        manualMetaPaging.page = 0;
+        manualMetaPaging.total = 0;
+        manualMetaPaging.hasMore = false;
+        manualMetaPaging.rows = [];
+        manualMetaPaging.pageRows.clear();
+        manualMetaPaging.pageView.clear();
+        updateManualMetaPagingUi();
+      };
+
+      const mergeManualOrderIds = (currentIds, targetIds) => {
+        const targetSet = new Set(targetIds);
+        const merged = [];
+        const seen = new Set();
+        currentIds.forEach((id) => {
+          const token = String(id || "").trim();
+          if (!token || !targetSet.has(token) || seen.has(token)) return;
+          seen.add(token);
+          merged.push(token);
+        });
+        targetIds.forEach((id) => {
+          const token = String(id || "").trim();
+          if (!token || seen.has(token)) return;
+          seen.add(token);
+          merged.push(token);
+        });
+        return merged;
+      };
+
+      const setManualMetaPageRows = (page, rows) => {
+        const targetPage = Math.max(1, Number(page || 1));
+        manualMetaPaging.pageRows.set(targetPage, dedupeRowsById(rows));
+      };
+
+      const captureManualPageView = () => {
+        if (manualMetaPaging.mode !== "page" || !manualMetaPaging.page) return;
+        manualMetaPaging.pageView.set(manualMetaPaging.page, {
+          orderIds: getManualListIds(),
+          checkedIds: getManualCheckedIds(),
+        });
+      };
+
+      const renderManualPageView = (page) => {
+        const targetPage = Math.max(1, Number(page || 1));
+        const pageRows = manualMetaPaging.pageRows.get(targetPage) || [];
+        const targetIds = collectFilteredProblemIds(pageRows);
+        const cached = manualMetaPaging.pageView.get(targetPage);
+        const orderIds = cached ? mergeManualOrderIds(cached.orderIds || [], targetIds) : targetIds;
+        const orderSet = new Set(orderIds);
+        let checkedIds = cached
+          ? uniqueIds((cached.checkedIds || []).filter((id) => orderSet.has(String(id || "").trim())))
+          : orderIds;
+        if (!checkedIds.length && orderIds.length) {
+          checkedIds = orderIds.slice();
+        }
+        renderManualOrderList(orderIds, { checkedIds, defaultChecked: false });
+        manualMetaPaging.mode = "page";
+        manualMetaPaging.page = targetPage;
+        manualMetaPaging.rows = dedupeRowsById(pageRows);
+        manualMetaPaging.hasMore = targetPage < manualMetaTotalPages();
+        updateManualMetaPagingUi();
+      };
+
+      const renderManualAllPages = () => {
+        const allRows = rowsFromLoadedPages();
+        const targetIds = collectFilteredProblemIds(allRows);
+        const currentOrderIds = getManualListIds();
+        const currentCheckedIds = getManualCheckedIds();
+        const mergedOrderIds = mergeManualOrderIds(currentOrderIds, targetIds);
+        const existingOrderSet = new Set(currentOrderIds);
+        const existingCheckedSet = new Set(currentCheckedIds);
+        const mergedCheckedIds = uniqueIds(
+          mergedOrderIds.filter((id) => existingCheckedSet.has(id) || !existingOrderSet.has(id))
+        );
+        renderManualOrderList(mergedOrderIds, {
+          checkedIds: mergedCheckedIds.length ? mergedCheckedIds : mergedOrderIds,
+          defaultChecked: false,
+        });
+        manualMetaPaging.mode = "all";
+        manualMetaPaging.rows = allRows;
+        manualMetaPaging.hasMore = false;
+        updateManualMetaPagingUi();
+      };
+
+      const loadAllManualPages = async () => {
+        if (!manualMetaPaging.page) return;
+        if (manualMetaPaging.mode === "page") {
+          captureManualPageView();
+        }
+        let totalPages = Math.max(1, manualMetaTotalPages());
+        for (let page = 1; page <= totalPages; page += 1) {
+          if (manualMetaPaging.pageRows.has(page)) {
+            continue;
+          }
+          const payload = await fetchManualMetaListPage(page);
+          const rows = payload.items || [];
+          rows.forEach((row) => upsertProblemMetaRow(row));
+          setManualMetaPageRows(payload.page, rows);
+          totalPages = Math.max(totalPages, manualMetaTotalPages());
+          setManualLoadStatus(`모든 페이지 로딩 중... ${Math.min(page, totalPages)}/${totalPages}`);
+        }
+        renderManualAllPages();
+      };
+
+      const fetchManualMetaListPage = async (page, { enforceQueryKey = true } = {}) => {
+        const targetPage = Math.max(1, Number(page || 1));
+        if (targetPage > MANUAL_ORDER_FETCH_MAX_PAGES) {
+          throw new Error("조회 페이지 한도를 초과했습니다.");
+        }
+        const currentQueryKey = manualMetaQueryKey();
+        if (enforceQueryKey && manualMetaPaging.queryKey && manualMetaPaging.queryKey !== currentQueryKey) {
+          throw new Error("필터 조건이 변경되었습니다. '필터 결과 불러오기'를 다시 실행하세요.");
+        }
+
+        const query = buildManualMetaListQuery({ page: targetPage, pageSize: manualMetaPaging.pageSize });
+        const payload = await fetchProblemMetaListPage(query);
+        const items = Array.isArray(payload.items) ? payload.items : [];
+
+        manualMetaPaging.queryKey = currentQueryKey;
+        const payloadPage = Math.max(1, Number(payload.page || targetPage));
+        manualMetaPaging.pageSize = Math.max(1, Number(payload.page_size || manualMetaPaging.pageSize));
+        manualMetaPaging.total = Math.max(0, Number(payload.total || items.length));
+        manualMetaPaging.hasMore = Boolean(payload.has_more);
+        return {
+          items,
+          page: payloadPage,
+          hasMore: Boolean(payload.has_more),
+        };
+      };
+
+      const fetchProblemMetaRowsByIds = async (ids, { source = "all" } = {}) => {
+        const targetIds = uniqueIds((Array.isArray(ids) ? ids : []).map((id) => String(id || "").trim()).filter(Boolean));
+        if (!targetIds.length) return [];
+
+        const rowById = new Map();
+        const chunkSize = 120;
+        for (let start = 0; start < targetIds.length; start += chunkSize) {
+          const chunkIds = targetIds.slice(start, start + chunkSize);
+          let page = 1;
+          while (page <= MANUAL_ORDER_FETCH_MAX_PAGES) {
+            const query = new URLSearchParams();
+            query.set("source", source);
+            query.set("page", String(page));
+            query.set("page_size", "500");
+            chunkIds.forEach((id) => query.append("selector_id", id));
+            const payload = await fetchProblemMetaListPage(query);
+            const items = Array.isArray(payload.items) ? payload.items : [];
+            items.forEach((row) => {
+              if (!row || !row.id) return;
+              rowById.set(row.id, row);
+            });
+            if (!payload.has_more) break;
+            page += 1;
+          }
+        }
+        return targetIds.map((id) => rowById.get(id)).filter(Boolean);
+      };
+
       const unitNodeMatches = (unitPath, nodeId) => {
         if (!unitPath || !nodeId) return false;
         if (nodeId.startsWith("L3::")) {
@@ -1445,7 +1790,9 @@
         syncManualSelectionInputs();
       };
 
-      const collectFilteredProblemIds = () => {
+      const collectFilteredProblemIds = (rowsSource = null) => {
+        const effectiveRows = Array.isArray(rowsSource) ? rowsSource : problemMeta;
+        const effectiveRowMap = new Map(effectiveRows.map((row) => [row.id, row]));
         const selectedDataSourceInput = document.querySelector('input[name="data_source"]:checked');
         const selectedDataSource = selectedDataSourceInput
           ? String(selectedDataSourceInput.value || "").trim().toLowerCase()
@@ -1482,10 +1829,10 @@
         let rows = [];
         if (selectorIds.length) {
           rows = selectorIds
-            .map((id) => problemMetaById.get(id))
+            .map((id) => effectiveRowMap.get(id) || problemMetaById.get(id))
             .filter((row) => rowMatches(row));
         } else {
-          rows = problemMeta.filter((row) => rowMatches(row));
+          rows = effectiveRows.filter((row) => rowMatches(row));
         }
 
         if (patternRegex) {
@@ -1557,12 +1904,136 @@
         fieldInput.addEventListener("change", refreshSortControls);
       });
       refreshSortControls();
+      if (manualAutoLoadAllPagesInput) {
+        manualAutoLoadAllPagesInput.checked = readManualAutoAllPagesPreference();
+        manualAutoLoadAllPagesInput.addEventListener("change", () => {
+          writeManualAutoAllPagesPreference(!!manualAutoLoadAllPagesInput.checked);
+        });
+      }
+      updateManualMetaPagingUi();
+
+      const setManualPagingBusyButtons = (busy) => {
+        const flag = !!busy;
+        if (loadFilteredOrderBtn) loadFilteredOrderBtn.disabled = flag;
+        if (loadFilteredOrderPrevBtn) loadFilteredOrderPrevBtn.disabled = flag;
+        if (loadFilteredOrderNextBtn) loadFilteredOrderNextBtn.disabled = flag;
+        if (loadFilteredOrderAllBtn) loadFilteredOrderAllBtn.disabled = flag;
+      };
 
       if (loadFilteredOrderBtn) {
-        loadFilteredOrderBtn.addEventListener("click", () => {
-          const ids = collectFilteredProblemIds();
-          renderManualOrderList(ids, { checkedIds: ids, defaultChecked: true });
-          refreshSortControls();
+        loadFilteredOrderBtn.addEventListener("click", async () => {
+          if (manualOrderLoading) return;
+          manualOrderLoading = true;
+          setManualPagingBusyButtons(true);
+          setManualLoadStatus("서버에서 필터 결과를 조회하는 중입니다...");
+          try {
+            resetManualMetaPaging();
+            const payload = await fetchManualMetaListPage(1, { enforceQueryKey: false });
+            const fetchedRows = payload.items || [];
+            fetchedRows.forEach((row) => upsertProblemMetaRow(row));
+            setManualMetaPageRows(payload.page, fetchedRows);
+            renderManualPageView(payload.page);
+            if (manualAutoAllPagesEnabled() && manualMetaTotalPages() > 1) {
+              setManualLoadStatus("자동 전체 로드 옵션으로 모든 페이지를 불러오는 중입니다...");
+              await loadAllManualPages();
+              setManualLoadStatus(`모든 페이지 로드 완료 (${manualMetaPaging.rows.length}개)`);
+            } else {
+              setManualLoadStatus(`페이지 ${manualMetaPaging.page}/${Math.max(1, manualMetaTotalPages())}를 불러왔습니다.`);
+            }
+            refreshSortControls();
+          } catch (error) {
+            const message = error && error.message ? error.message : "알 수 없는 오류";
+            const ids = collectFilteredProblemIds();
+            renderManualOrderList(ids, { checkedIds: ids, defaultChecked: true });
+            resetManualMetaPaging();
+            setManualLoadStatus(`서버 조회 실패로 로컬 캐시 결과를 사용했습니다. (${message})`, true);
+            refreshSortControls();
+          } finally {
+            manualOrderLoading = false;
+            if (loadFilteredOrderBtn) loadFilteredOrderBtn.disabled = false;
+            updateManualMetaPagingUi();
+          }
+        });
+      }
+
+      if (loadFilteredOrderPrevBtn) {
+        loadFilteredOrderPrevBtn.addEventListener("click", async () => {
+          if (manualOrderLoading) return;
+          if (manualMetaPaging.mode !== "page" || manualMetaPaging.page <= 1) return;
+          manualOrderLoading = true;
+          setManualPagingBusyButtons(true);
+          setManualLoadStatus(`이전 페이지(${manualMetaPaging.page - 1})를 불러오는 중입니다...`);
+          try {
+            captureManualPageView();
+            const targetPage = manualMetaPaging.page - 1;
+            if (!manualMetaPaging.pageRows.has(targetPage)) {
+              const payload = await fetchManualMetaListPage(targetPage);
+              const rows = payload.items || [];
+              rows.forEach((row) => upsertProblemMetaRow(row));
+              setManualMetaPageRows(payload.page, rows);
+            }
+            renderManualPageView(targetPage);
+            setManualLoadStatus(`페이지 ${manualMetaPaging.page}/${Math.max(1, manualMetaTotalPages())}를 표시 중입니다.`);
+          } catch (error) {
+            const message = error && error.message ? error.message : "알 수 없는 오류";
+            setManualLoadStatus(`이전 페이지 로드 실패: ${message}`, true);
+          } finally {
+            manualOrderLoading = false;
+            if (loadFilteredOrderBtn) loadFilteredOrderBtn.disabled = false;
+            updateManualMetaPagingUi();
+          }
+        });
+      }
+
+      if (loadFilteredOrderNextBtn) {
+        loadFilteredOrderNextBtn.addEventListener("click", async () => {
+          if (manualOrderLoading) return;
+          if (manualMetaPaging.mode !== "page" || !manualMetaPaging.page) return;
+          const totalPages = Math.max(1, manualMetaTotalPages());
+          if (manualMetaPaging.page >= totalPages) return;
+          manualOrderLoading = true;
+          setManualPagingBusyButtons(true);
+          setManualLoadStatus(`다음 페이지(${manualMetaPaging.page + 1})를 불러오는 중입니다...`);
+          try {
+            captureManualPageView();
+            const targetPage = manualMetaPaging.page + 1;
+            if (!manualMetaPaging.pageRows.has(targetPage)) {
+              const payload = await fetchManualMetaListPage(targetPage);
+              const rows = payload.items || [];
+              rows.forEach((row) => upsertProblemMetaRow(row));
+              setManualMetaPageRows(payload.page, rows);
+            }
+            renderManualPageView(targetPage);
+            setManualLoadStatus(`페이지 ${manualMetaPaging.page}/${Math.max(1, manualMetaTotalPages())}를 표시 중입니다.`);
+          } catch (error) {
+            const message = error && error.message ? error.message : "알 수 없는 오류";
+            setManualLoadStatus(`다음 페이지 로드 실패: ${message}`, true);
+          } finally {
+            manualOrderLoading = false;
+            if (loadFilteredOrderBtn) loadFilteredOrderBtn.disabled = false;
+            updateManualMetaPagingUi();
+          }
+        });
+      }
+
+      if (loadFilteredOrderAllBtn) {
+        loadFilteredOrderAllBtn.addEventListener("click", async () => {
+          if (manualOrderLoading) return;
+          if (!manualMetaPaging.page) return;
+          manualOrderLoading = true;
+          setManualPagingBusyButtons(true);
+          setManualLoadStatus("모든 페이지를 불러오는 중입니다...");
+          try {
+            await loadAllManualPages();
+            setManualLoadStatus(`모든 페이지 로드 완료 (${manualMetaPaging.rows.length}개)`);
+          } catch (error) {
+            const message = error && error.message ? error.message : "알 수 없는 오류";
+            setManualLoadStatus(`모든 페이지 로드 실패: ${message}`, true);
+          } finally {
+            manualOrderLoading = false;
+            if (loadFilteredOrderBtn) loadFilteredOrderBtn.disabled = false;
+            updateManualMetaPagingUi();
+          }
         });
       }
 
@@ -1572,6 +2043,8 @@
           syncManualSelectedInput([]);
           selectedManualOrderId = "";
           renderManualOrderList([]);
+          resetManualMetaPaging();
+          setManualLoadStatus("수동 순서를 초기화했습니다.");
         });
       }
 
@@ -1588,7 +2061,40 @@
       }
 
       if (renderForm) {
-        renderForm.addEventListener("submit", () => {
+        renderForm.addEventListener("submit", async (event) => {
+          if (renderSubmitPending) {
+            renderSubmitPending = false;
+            return;
+          }
+          if (manualOrderLoading) {
+            event.preventDefault();
+            setManualLoadStatus("문항 목록 로딩이 끝난 뒤 다시 시도해주세요.", true);
+            return;
+          }
+          const shouldAutoLoadAll =
+            manualAutoAllPagesEnabled() &&
+            manualMetaPaging.mode === "page" &&
+            manualMetaPaging.page > 0 &&
+            manualMetaTotalPages() > 1;
+          if (shouldAutoLoadAll) {
+            event.preventDefault();
+            manualOrderLoading = true;
+            setManualPagingBusyButtons(true);
+            setManualLoadStatus("PDF 출력 전 자동 전체 로드를 진행합니다...");
+            try {
+              await loadAllManualPages();
+              syncManualSelectionInputs();
+              renderSubmitPending = true;
+              renderForm.submit();
+            } catch (error) {
+              const message = error && error.message ? error.message : "알 수 없는 오류";
+              setManualLoadStatus(`PDF 출력 전 전체 로드 실패: ${message}`, true);
+            } finally {
+              manualOrderLoading = false;
+              updateManualMetaPagingUi();
+            }
+            return;
+          }
           syncManualSelectionInputs();
         });
       }
@@ -1849,6 +2355,24 @@
       const initialManualSelectedIds = uniqueIds(parseIds(manualSelectedIdsInput ? manualSelectedIdsInput.value : ""));
       const initialCheckedIds = initialManualSelectedIds.length ? initialManualSelectedIds : initialManualOrderIds;
       renderManualOrderList(initialManualOrderIds, { checkedIds: initialCheckedIds, defaultChecked: true });
+      if (initialManualOrderIds.length) {
+        const missingIds = initialManualOrderIds.filter((id) => !problemMetaById.has(id));
+        if (missingIds.length) {
+          setManualLoadStatus("초기 문항 메타를 조회하는 중입니다...");
+          fetchProblemMetaRowsByIds(missingIds, { source: "all" })
+            .then((rows) => {
+              rows.forEach((row) => upsertProblemMetaRow(row));
+              const orderIds = getManualListIds();
+              const checkedIds = getManualCheckedIds();
+              renderManualOrderList(orderIds, { checkedIds, defaultChecked: false });
+              setManualLoadStatus(`초기 문항 메타 ${rows.length}개 로드 완료`);
+            })
+            .catch((error) => {
+              const message = error && error.message ? error.message : "알 수 없는 오류";
+              setManualLoadStatus(`초기 문항 메타 로드 실패: ${message}`, true);
+            });
+        }
+      }
 
       const officialProblemMeta = problemMeta.filter(
         (row) => String(row.root_kind || "official").trim().toLowerCase() !== "generated"
@@ -1950,6 +2474,9 @@
       const seedCheckAllBtn = document.getElementById("similar-seed-check-all");
       const seedUncheckAllBtn = document.getElementById("similar-seed-uncheck-all");
       const seedResultList = document.getElementById("similar-seed-result-list");
+      const seedPagePrevBtn = document.getElementById("similar-seed-page-prev");
+      const seedPageNextBtn = document.getElementById("similar-seed-page-next");
+      const seedPageStatusEl = document.getElementById("similar-seed-page-status");
       const seedSelectionStatus = document.getElementById("similar-seed-selection-status");
       const seedPreviewTitle = document.getElementById("similar-seed-preview-title");
       const seedPreviewSubtitle = document.getElementById("similar-seed-preview-subtitle");
@@ -1975,6 +2502,8 @@
       const reviewStatusInput = document.getElementById("similar-review-status");
       const reviewNoteInput = document.getElementById("similar-review-note");
 
+      const SEED_SEARCH_PAGE_SIZE = 120;
+
       const state = {
         bootstrapped: false,
         requestToken: 0,
@@ -1996,6 +2525,10 @@
         seedCheckedIds: new Set(),
         seedActiveId: "",
         seedPreviewCache: new Map(),
+        seedSearchPage: 1,
+        seedSearchPageSize: SEED_SEARCH_PAGE_SIZE,
+        seedSearchTotal: 0,
+        seedSearchHasMore: false,
       };
 
       const escapeHtml = (value) =>
@@ -2075,10 +2608,23 @@
           : null;
       };
 
-      const initializeSeedFilterOptions = () => {
+      const initializeSeedFilterOptions = async () => {
+        try {
+          const payload = await fetchJson("/api/problem-meta-filter-options?source=official");
+          setSelectOptions(seedSchoolInput, payload.schools || []);
+          setSelectOptions(seedYearInput, payload.years || []);
+          setSelectOptions(seedGradeInput, payload.grades || []);
+          setSelectOptions(seedSemesterInput, payload.semesters || []);
+          setSelectOptions(seedExamInput, payload.exams || []);
+          setSelectOptions(seedSubjectInput, payload.subjects || []);
+          return;
+        } catch (_error) {
+          // Fallback to bootstrap bridge for backward compatibility.
+        }
+
         const bridge = similarBridge();
         if (!bridge || typeof bridge.getDistinctMetaValues !== "function") {
-          setGenerateStatus("PDF 탭 메타데이터 브리지를 찾지 못했습니다.", true);
+          setGenerateStatus("Seed 필터 옵션을 불러오지 못했습니다.", true);
           return;
         }
         const values = bridge.getDistinctMetaValues();
@@ -2100,6 +2646,25 @@
         pattern: seedPatternInput ? seedPatternInput.value : "",
         unit_keyword: seedUnitKeywordInput ? seedUnitKeywordInput.value : "",
       });
+
+      const updateSeedPagingUi = () => {
+        const page = Math.max(1, Number(state.seedSearchPage || 1));
+        const pageSize = Math.max(1, Number(state.seedSearchPageSize || SEED_SEARCH_PAGE_SIZE));
+        const total = Math.max(0, Number(state.seedSearchTotal || 0));
+        const from = total ? (page - 1) * pageSize + 1 : 0;
+        const to = total ? Math.min(total, (page - 1) * pageSize + state.seedSearchRows.length) : 0;
+        if (seedPageStatusEl) {
+          seedPageStatusEl.textContent = total
+            ? `페이지 ${page} | 결과 ${from}-${to}/${total}`
+            : `페이지 ${page} | 결과 0`;
+        }
+        if (seedPagePrevBtn) {
+          seedPagePrevBtn.disabled = page <= 1 || total === 0;
+        }
+        if (seedPageNextBtn) {
+          seedPageNextBtn.disabled = !state.seedSearchHasMore;
+        }
+      };
 
       const checkedSeedIdsFromDom = () =>
         Array.from(
@@ -2192,7 +2757,13 @@
       };
 
       const syncSeedCheckedIdsFromDom = () => {
-        state.seedCheckedIds = new Set(checkedSeedIdsFromDom());
+        const currentPageIds = new Set(seedSearchIds());
+        currentPageIds.forEach((id) => {
+          state.seedCheckedIds.delete(id);
+        });
+        checkedSeedIdsFromDom().forEach((id) => {
+          state.seedCheckedIds.add(id);
+        });
         const activeText = state.seedActiveId ? ` | 미리보기 ${state.seedActiveId}` : "";
         setSeedSelectionStatus(`선택 Seed ${state.seedCheckedIds.size}개${activeText}`);
       };
@@ -2245,15 +2816,18 @@
         seedResultList.innerHTML = "";
 
         if (!data.length) {
-          state.seedCheckedIds = new Set();
+          if (!preserveChecked) {
+            state.seedCheckedIds = new Set();
+          }
           state.seedActiveId = "";
           seedResultList.innerHTML = '<li class="empty">조건에 맞는 문항이 없습니다.</li>';
-          setSeedSelectionStatus("선택 Seed 0개");
+          setSeedSelectionStatus(`선택 Seed ${state.seedCheckedIds.size}개`);
           setSeedPreviewEmpty("조건에 맞는 Seed 문항이 없습니다.");
+          updateSeedPagingUi();
           return;
         }
 
-        const checkedSet = new Set();
+        const checkedSet = new Set(previousChecked);
         const availableIds = new Set(data.map((row) => String(row.id || "").trim()).filter(Boolean));
         let nextActive = previousActive && availableIds.has(previousActive) ? previousActive : "";
         if (!nextActive) {
@@ -2287,6 +2861,12 @@
               event.stopPropagation();
             });
             checkbox.addEventListener("change", () => {
+              if (checkbox.checked) {
+                checkedSet.add(problemId);
+              } else {
+                checkedSet.delete(problemId);
+              }
+              state.seedCheckedIds = new Set(checkedSet);
               syncSeedCheckedIdsFromDom();
             });
           }
@@ -2322,7 +2902,8 @@
         state.seedCheckedIds = checkedSet;
         state.seedActiveId = nextActive;
         updateSeedActiveRowUi();
-        setSeedSelectionStatus(`검색결과 ${data.length}개 | 선택 Seed ${checkedSet.size}개`);
+        setSeedSelectionStatus(`검색결과 ${data.length}개 | 선택 Seed ${state.seedCheckedIds.size}개`);
+        updateSeedPagingUi();
         if (nextActive) {
           loadSeedPreview(nextActive, { subtitlePrefix: "검색결과" }).catch((error) => {
             const message = error && error.message ? error.message : "Seed 미리보기 로드 실패";
@@ -2333,14 +2914,46 @@
         }
       };
 
-      const loadSeedSearchResults = ({ preserveChecked = true, preserveActive = true } = {}) => {
-        const bridge = similarBridge();
-        if (!bridge || typeof bridge.filterProblemMeta !== "function") {
-          setGenerateStatus("검색 브리지를 찾지 못했습니다. 페이지 새로고침 후 다시 시도하세요.", true);
-          return;
+      const loadSeedSearchResults = async ({
+        preserveChecked = true,
+        preserveActive = true,
+        page = 1,
+      } = {}) => {
+        const targetPage = Math.max(1, Number(page || 1));
+        const criteria = currentSeedCriteria();
+        const query = new URLSearchParams();
+        query.set("source", "official");
+        query.set("page", String(targetPage));
+        query.set("page_size", String(SEED_SEARCH_PAGE_SIZE));
+        if (criteria.school) query.set("school", criteria.school);
+        if (criteria.year) query.set("year", criteria.year);
+        if (criteria.grade) query.set("grade", criteria.grade);
+        if (criteria.semester) query.set("semester", criteria.semester);
+        if (criteria.exam) query.set("exam", criteria.exam);
+        if (criteria.subject) query.set("subject", criteria.subject);
+        if (criteria.pattern) query.set("pattern", criteria.pattern);
+        if (criteria.unit_keyword) query.set("unit_keyword", criteria.unit_keyword);
+
+        setGenerateStatus(`Seed 검색 중... (페이지 ${targetPage})`);
+        try {
+          const payload = await fetchJson(`/api/problem-meta-list?${query.toString()}`);
+          const rows = Array.isArray(payload.items) ? payload.items : [];
+          state.seedSearchPage = Number(payload.page || targetPage) || targetPage;
+          state.seedSearchPageSize = Number(payload.page_size || SEED_SEARCH_PAGE_SIZE) || SEED_SEARCH_PAGE_SIZE;
+          state.seedSearchTotal = Number(payload.total || rows.length) || 0;
+          state.seedSearchHasMore = Boolean(payload.has_more);
+          renderSeedSearchResults(rows, { preserveChecked, preserveActive });
+          setGenerateStatus(
+            `Seed 검색 완료: 페이지 ${state.seedSearchPage} | ${rows.length}개 표시 (전체 ${state.seedSearchTotal}개)`
+          );
+        } catch (error) {
+          state.seedSearchRows = [];
+          state.seedSearchTotal = 0;
+          state.seedSearchHasMore = false;
+          updateSeedPagingUi();
+          const message = error && error.message ? error.message : "Seed 검색 실패";
+          setGenerateStatus(message, true);
         }
-        const rows = bridge.filterProblemMeta(currentSeedCriteria());
-        renderSeedSearchResults(rows, { preserveChecked, preserveActive });
       };
 
       const setPreviewEmpty = (message) => {
@@ -3452,13 +4065,13 @@
       }
 
       if (seedSearchBtn) {
-        seedSearchBtn.addEventListener("click", () => {
-          loadSeedSearchResults({ preserveChecked: false });
+        seedSearchBtn.addEventListener("click", async () => {
+          await loadSeedSearchResults({ preserveChecked: false, preserveActive: false, page: 1 });
         });
       }
 
       if (seedResetBtn) {
-        seedResetBtn.addEventListener("click", () => {
+        seedResetBtn.addEventListener("click", async () => {
           [
             seedSchoolInput,
             seedYearInput,
@@ -3471,7 +4084,22 @@
           });
           if (seedPatternInput) seedPatternInput.value = "";
           if (seedUnitKeywordInput) seedUnitKeywordInput.value = "";
-          loadSeedSearchResults({ preserveChecked: false });
+          await loadSeedSearchResults({ preserveChecked: false, preserveActive: false, page: 1 });
+        });
+      }
+
+      if (seedPagePrevBtn) {
+        seedPagePrevBtn.addEventListener("click", async () => {
+          const targetPage = Math.max(1, Number(state.seedSearchPage || 1) - 1);
+          await loadSeedSearchResults({ preserveChecked: true, preserveActive: false, page: targetPage });
+        });
+      }
+
+      if (seedPageNextBtn) {
+        seedPageNextBtn.addEventListener("click", async () => {
+          if (!state.seedSearchHasMore) return;
+          const targetPage = Math.max(1, Number(state.seedSearchPage || 1) + 1);
+          await loadSeedSearchResults({ preserveChecked: true, preserveActive: false, page: targetPage });
         });
       }
 
@@ -3518,8 +4146,10 @@
       const initializeWhenTabOpened = async () => {
         if (state.bootstrapped) return;
         state.bootstrapped = true;
-        initializeSeedFilterOptions();
+        await initializeSeedFilterOptions();
         setSeedSelectionStatus("검색결과에서 Seed 문항을 체크하세요.");
+        updateSeedPagingUi();
+        await loadSeedSearchResults({ preserveChecked: false, preserveActive: false, page: 1 });
         await loadAiConfig();
         await loadBatches({ preserveSelection: false });
         await loadCandidates({ preserveSelection: false });
