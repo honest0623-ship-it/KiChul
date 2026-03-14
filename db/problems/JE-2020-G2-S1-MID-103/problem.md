@@ -12,10 +12,10 @@ source_question_kind: subjective
 source_question_label: 서답3
 difficulty: 4
 level: 4
-unit: 확률과 통계(2022개정)>3. 통계>3-2. 통계적 추정
-unit_l1: 확률과 통계(2022개정)
-unit_l2: 3. 통계
-unit_l3: 3-2. 통계적 추정
+unit: 대수(2022개정)>1. 지수함수와 로그함수>1-1. 지수와 로그
+unit_l1: 대수(2022개정)
+unit_l2: 1. 지수함수와 로그함수
+unit_l3: 1-1. 지수와 로그
 source: user_upload_2026-03-12
 tags:
 - 수동생성
